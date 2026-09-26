@@ -1,0 +1,6 @@
+{
+  "name": "SUI CodePulse Studio",
+  "description": "A modern, premium live code editor and playground for HTML, CSS, and JavaScript built by developer Suman M with instant preview, SUI.css integration, DOM Elements Inspector, Visual CSS Studio, Accessibility Auditor, and developer console.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

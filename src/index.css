@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *));
+
+@layer base {
+  :root {
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Fira Code', Menlo, Monaco, Consolas, monospace;
+  }
+  
+  body {
+    font-family: var(--font-sans);
+  }
+
+  code, pre, .font-mono {
+    font-family: var(--font-mono);
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 150, 0.2);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 150, 0.4);
+}
+
+/* CodeMirror overrides for seamless dark/light styling */
+.cm-editor {
+  height: 100% !important;
+  font-family: var(--font-mono) !important;
+  font-feature-settings: "liga" 1, "calt" 1;
+}
+
+.cm-scroller {
+  font-family: var(--font-mono) !important;
+  overflow: auto !important;
+  line-height: 1.6 !important;
+}
+
+.cm-gutters {
+  user-select: none;
+}
+
+/* Resizer handle glow */
+.resizer-hover:hover {
+  background-color: #3b82f6 !important;
+}
+
+/* Light / Dark Mode root helper */
+.dark-theme {
+  color-scheme: dark;
+}
+
+.light-theme {
+  color-scheme: light;
+}
+
+/* High contrast guarantees for Light Mode CodeMirror */
+.light-theme .cm-editor {
+  background-color: #ffffff !important;
+  color: #0f172a;
+}
+
+.light-theme .cm-editor .cm-content {
+  color: #0f172a;
+  caret-color: #2563eb !important;
+}
+
+.light-theme .cm-editor .cm-line {
+  color: #0f172a;
+}
+
+.light-theme .cm-editor .cm-gutters {
+  background-color: #f8fafc !important;
+  color: #475569 !important;
+  border-right: 1px solid #e2e8f0 !important;
+}
+
+.light-theme .cm-editor .cm-activeLine {
+  background-color: rgba(59, 130, 246, 0.07) !important;
+}
+
+.light-theme .cm-editor .cm-activeLineGutter {
+  background-color: rgba(59, 130, 246, 0.14) !important;
+  color: #1d4ed8 !important;
+  font-weight: 700 !important;
+}
