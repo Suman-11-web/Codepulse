@@ -136,7 +136,7 @@ vercel
    git init
    git add .
    git commit -m "Initial commit of SUI CodePulse Studio"
-   git remote add origin https://github.com/your-username/sui-codepulse-studio.git
+   git remote add origin https://github.com/suman-11-web/Codepulse.git
    git push -u origin main
    ```
 2. Log into [Vercel](https://vercel.com) and click **"Add New Project"**.
