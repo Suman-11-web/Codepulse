@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://codepulse-drab.vercel.app/sitemap.xml
