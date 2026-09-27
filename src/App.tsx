@@ -43,7 +43,6 @@ import { HelpModal } from './components/HelpModal';
 import { AboutModal } from './components/AboutModal';
 import { ShareModal } from './components/ShareModal';
 import { LibrariesModal } from './components/LibrariesModal';
-import { QuickInsertBar } from './components/QuickInsertBar';
 import { AssetInsertModal } from './components/AssetInsertModal';
 import { CommandPaletteModal, CommandItem } from './components/CommandPaletteModal';
 import { Toast } from './components/Toast';
@@ -188,7 +187,7 @@ export default function App() {
   const [editorCols, setEditorCols] = useState({ html: 33.33, css: 33.33, js: 33.34 });
 
   // Dropdown Menus
-  const [activeMenu, setActiveMenu] = useState<'file' | 'edit' | 'view' | null>(null);
+  const [activeMenu, setActiveMenu] = useState<'file' | 'edit' | 'view' | 'studios' | null>(null);
 
   // Modals & Tools
   const [isProjectsModalOpen, setIsProjectsModalOpen] = useState(false);
@@ -442,6 +441,9 @@ export default function App() {
       } else if (isMod && e.shiftKey && (e.key === 'p' || e.key === 'P')) {
         e.preventDefault();
         setIsCommandPaletteOpen(prev => !prev);
+      } else if (isMod && (e.key === 'i' || e.key === 'I')) {
+        e.preventDefault();
+        setIsAssetModalOpen(prev => !prev);
       } else if (e.shiftKey && e.altKey && (e.key === 'f' || e.key === 'F')) {
         e.preventDefault();
         handleFormatAll();
@@ -1139,8 +1141,8 @@ export default function App() {
         <header className={`h-12 sm:h-13 px-2 sm:px-4 border-b flex items-center justify-between z-30 shrink-0 backdrop-blur-md w-full max-w-full ${
           theme === 'dark' ? 'bg-[#090d16]/95 border-neutral-800' : 'bg-white/95 border-neutral-200/80 shadow-xs'
         }`}>
-        {/* Left Zone: Brand & Studio Menu Bars */}
-        <div className="flex items-center gap-1.5 sm:gap-3 min-w-0" data-menu-container>
+        {/* Left Zone: Brand, Studio Menus, Command Palette & Libraries */}
+        <div className="flex items-center gap-1 sm:gap-2.5 shrink-0" data-menu-container>
           {/* Logo */}
           <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white font-black text-xs sm:text-sm shadow-md shadow-blue-500/20">
@@ -1314,6 +1316,20 @@ export default function App() {
                       <span>Format Document</span>
                     </span>
                     <kbd className="text-[10px] opacity-60">Shift+Alt+F</kbd>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsAssetModalOpen(true);
+                      setActiveMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white flex items-center justify-between font-semibold transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Plus className="w-3.5 h-3.5 text-blue-500" />
+                      <span>Insert Links, Scripts &amp; Tags</span>
+                    </span>
+                    <kbd className="text-[10px] opacity-60">Ctrl+I</kbd>
                   </button>
 
                   <div className="h-px bg-neutral-200 dark:bg-neutral-800 my-1" />
@@ -1563,121 +1579,140 @@ export default function App() {
               )}
             </div>
           </nav>
-        </div>
 
-        {/* Right Zone: Primary Actions & Promotions */}
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          <div className="h-4 sm:h-5 w-px bg-neutral-200 dark:bg-neutral-800 mx-0.5 sm:mx-1 hidden md:block shrink-0" />
+
           {/* COMMAND PALETTE BUTTON */}
           <button
             onClick={() => setIsCommandPaletteOpen(true)}
-            title="Command Palette (Ctrl+K or Ctrl+Shift+P)"
-            className="hidden md:flex items-center gap-1.5 px-2 py-1 sm:py-1.5 rounded-lg border border-neutral-300 dark:border-neutral-700/80 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors text-xs font-semibold shrink-0"
+            title="Command Palette (Ctrl+K or ⌘K)"
+            className="hidden sm:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border border-neutral-300 dark:border-neutral-700/80 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors text-xs font-semibold shrink-0"
           >
-            <Command className="w-3.5 h-3.5 text-blue-500" />
+            <Command className="w-3.5 h-3.5 text-blue-500 shrink-0" />
             <span className="hidden lg:inline text-[11px]">Commands</span>
             <kbd className="text-[10px] font-mono px-1 py-0.2 bg-neutral-200/80 dark:bg-neutral-800 rounded">
               ⌘K
             </kbd>
           </button>
 
-          {/* INSERT LINKS & TAGS BUTTON */}
-          <button
-            onClick={() => setIsAssetModalOpen(true)}
-            title="Insert Required Links, Stylesheets, Scripts, Buttons & Tags"
-            className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30 transition-colors shrink-0"
-          >
-            <Plus className="w-3.5 h-3.5 text-blue-500" />
-            <span className="hidden xl:inline">+ Link / Tag</span>
-          </button>
-
           {/* LIBRARIES BUTTON */}
           <button
             onClick={() => setIsLibrariesModalOpen(true)}
-            title="External Libraries & CDNs (Tailwind, Bootstrap, Three.js, etc.)"
+            title="External CDN Libraries (Tailwind, Bootstrap, Three.js, Lucide, FontAwesome)"
             className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold border border-neutral-300 dark:border-neutral-700/80 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors shrink-0"
           >
-            <Layers className="w-3.5 h-3.5 text-blue-500" />
-            <span className="hidden xl:inline">Libraries</span>
+            <Layers className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+            <span className="hidden sm:inline">Libraries</span>
             <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold border border-blue-500/20">
               {activeLibraries.filter(l => l.enabled).length}
             </span>
           </button>
+        </div>
 
-          {/* VISUAL CSS STUDIO BUTTON */}
-          <button
-            onClick={() => setIsCssStudioOpen(true)}
-            title="Visual CSS Studio (Gradients, Box Shadows, Glassmorphism)"
-            className="hidden lg:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/30 transition-colors shrink-0"
-          >
-            <Sliders className="w-3.5 h-3.5 text-purple-500" />
-            <span className="hidden xl:inline">CSS Studio</span>
-          </button>
+        {/* Right Zone: Primary Actions, Studios & Running */}
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {/* STUDIOS DROPDOWN */}
+          <div className="relative">
+            <button
+              onClick={() => setActiveMenu(activeMenu === 'studios' ? null : 'studios')}
+              title="Visual Design Studios & Advanced Tools"
+              className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold border transition-colors shrink-0 ${
+                activeMenu === 'studios'
+                  ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                  : 'bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/30'
+              }`}
+            >
+              <Sliders className="w-3.5 h-3.5 text-purple-500" />
+              <span className="hidden md:inline">Studios</span>
+              <ChevronDown className="w-2.5 h-2.5 opacity-60" />
+            </button>
 
-          {/* KEYFRAME ANIMATION STUDIO BUTTON */}
-          <button
-            onClick={() => setIsKeyframeStudioOpen(true)}
-            title="CSS Keyframe & Animation Timeline Studio"
-            className="hidden xl:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30 transition-colors shrink-0"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-blue-500" />
-            <span>Timeline</span>
-          </button>
-
-          {/* MESH & GLASS STUDIO BUTTON */}
-          <button
-            onClick={() => setIsGlassMeshStudioOpen(true)}
-            title="Mesh Gradient & Glassmorphism Studio"
-            className="hidden xl:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/30 transition-colors shrink-0"
-          >
-            <Layers className="w-3.5 h-3.5 text-purple-500" />
-            <span>Glass & Mesh</span>
-          </button>
-
-          {/* WCAG AAA PALETTE BUTTON */}
-          <button
-            onClick={() => setIsPaletteContrastOpen(true)}
-            title="Color Palette & WCAG AAA Contrast Checker"
-            className="hidden 2xl:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 transition-colors shrink-0"
-          >
-            <Palette className="w-3.5 h-3.5 text-emerald-500" />
-            <span>WCAG Palette</span>
-          </button>
-
-          {/* VERSION HISTORY CHECKPOINTS BUTTON */}
-          <button
-            onClick={() => setIsVersionHistoryOpen(true)}
-            title="Version History & Local Checkpoints"
-            className="hidden lg:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold border border-neutral-300 dark:border-neutral-700/80 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors shrink-0"
-          >
-            <History className="w-3.5 h-3.5 text-amber-500" />
-            <span className="hidden xl:inline">Checkpoints</span>
-          </button>
-
-          {/* CODE CARD BUTTON */}
-          <button
-            onClick={() => setIsCodeCardOpen(true)}
-            title="Export Shareable Code Card (Ray.so / Carbon)"
-            className="hidden lg:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold border border-neutral-300 dark:border-neutral-700/80 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors shrink-0"
-          >
-            <ImageIcon className="w-3.5 h-3.5 text-indigo-500" />
-            <span className="hidden xl:inline">Code Card</span>
-          </button>
-
-          {/* ZEN PRESENTATION MODE BUTTON */}
-          <button
-            onClick={() => setIsZenMode(true)}
-            title="Enter Zen / Presentation Mode (F11)"
-            className="hidden md:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold border border-neutral-300 dark:border-neutral-700/80 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors shrink-0"
-          >
-            <Monitor className="w-3.5 h-3.5 text-purple-500" />
-            <span className="hidden xl:inline">Zen</span>
-          </button>
+            {activeMenu === 'studios' && (
+              <div className={`absolute right-0 top-full mt-1.5 w-64 rounded-xl shadow-2xl border p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 ${
+                theme === 'dark' ? 'bg-[#0d1117] border-neutral-800 text-neutral-200' : 'bg-white border-neutral-200 text-neutral-800'
+              }`}>
+                <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+                  Visual Studios &amp; Generators
+                </div>
+                <button
+                  onClick={() => {
+                    setIsCssStudioOpen(true);
+                    setActiveMenu(null);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-purple-600 hover:text-white dark:hover:bg-purple-600 dark:hover:text-white flex items-center gap-2 text-xs transition-colors"
+                >
+                  <Sliders className="w-3.5 h-3.5 text-purple-500" />
+                  <span>Visual CSS Studio</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setIsKeyframeStudioOpen(true);
+                    setActiveMenu(null);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-purple-600 hover:text-white dark:hover:bg-purple-600 dark:hover:text-white flex items-center gap-2 text-xs transition-colors"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Keyframe Animation Timeline</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setIsGlassMeshStudioOpen(true);
+                    setActiveMenu(null);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-purple-600 hover:text-white dark:hover:bg-purple-600 dark:hover:text-white flex items-center gap-2 text-xs transition-colors"
+                >
+                  <Layers className="w-3.5 h-3.5 text-purple-500" />
+                  <span>Glass &amp; Mesh Gradients</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setIsPaletteContrastOpen(true);
+                    setActiveMenu(null);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-purple-600 hover:text-white dark:hover:bg-purple-600 dark:hover:text-white flex items-center gap-2 text-xs transition-colors"
+                >
+                  <Palette className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>WCAG AAA Contrast Checker</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setIsVersionHistoryOpen(true);
+                    setActiveMenu(null);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-purple-600 hover:text-white dark:hover:bg-purple-600 dark:hover:text-white flex items-center gap-2 text-xs transition-colors"
+                >
+                  <History className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Version History &amp; Checkpoints</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setIsCodeCardOpen(true);
+                    setActiveMenu(null);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-purple-600 hover:text-white dark:hover:bg-purple-600 dark:hover:text-white flex items-center gap-2 text-xs transition-colors"
+                >
+                  <ImageIcon className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Export Code Card (Ray.so)</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setIsMatrixOpen(true);
+                    setActiveMenu(null);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-purple-600 hover:text-white dark:hover:bg-purple-600 dark:hover:text-white flex items-center gap-2 text-xs transition-colors"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5 text-sky-500" />
+                  <span>Multi-Device Matrix</span>
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* CODE HEALTH AUDITOR BUTTON */}
           <button
             onClick={() => setIsCodeHealthOpen(true)}
             title={`Code Health & Accessibility: ${auditReport.score}% (Grade ${auditReport.grade})`}
-            className={`hidden md:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold border transition-colors shrink-0 ${
+            className={`hidden xl:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold border transition-colors shrink-0 ${
               auditReport.score >= 90
                 ? 'border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20'
                 : auditReport.score >= 70
@@ -1686,7 +1721,7 @@ export default function App() {
             }`}
           >
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span className="hidden xl:inline">Health:</span>
+            <span className="hidden 2xl:inline">Health:</span>
             <span className="font-bold">{auditReport.score}%</span>
           </button>
 
@@ -1836,16 +1871,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ========================================================
-          QUICK INSERT BAR (1-Click Links, Stylesheets, Scripts, Buttons & Tags)
-      ======================================================== */}
-      {!isZenMode && (
-        <QuickInsertBar
-          onInsertSnippet={handleInsertSnippet}
-          onOpenModal={() => setIsAssetModalOpen(true)}
-          theme={theme}
-        />
-      )}
 
       {/* ========================================================
           3. MAIN WORKSPACE VIEWPORT
