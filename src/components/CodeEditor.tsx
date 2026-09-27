@@ -52,6 +52,8 @@ interface CodeEditorProps {
   isMaximized?: boolean;
   onToggleMaximize?: () => void;
   onClearRequest?: () => void;
+  dialect?: 'css' | 'scss' | 'javascript' | 'typescript';
+  onDialectChange?: (dialect: any) => void;
 }
 
 export const CodeEditor: React.FC<CodeEditorProps> = ({
@@ -70,7 +72,9 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
   onInsertSnippet,
   isMaximized = false,
   onToggleMaximize,
-  onClearRequest
+  onClearRequest,
+  dialect,
+  onDialectChange
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorViewRef = useRef<EditorView | null>(null);
@@ -375,6 +379,56 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
           }`}>
             {title}
           </span>
+
+          {language === 'css' && onDialectChange && (
+            <div className={`flex items-center p-0.5 rounded-md border text-[10px] font-semibold ${
+              theme === 'dark' ? 'bg-neutral-800 border-neutral-700' : 'bg-neutral-200/70 border-neutral-300'
+            }`}>
+              <button
+                type="button"
+                onClick={() => onDialectChange('css')}
+                className={`px-1.5 py-0.5 rounded transition-colors ${
+                  dialect !== 'scss' ? 'bg-blue-600 text-white shadow-xs' : 'text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                CSS
+              </button>
+              <button
+                type="button"
+                onClick={() => onDialectChange('scss')}
+                className={`px-1.5 py-0.5 rounded transition-colors ${
+                  dialect === 'scss' ? 'bg-pink-600 text-white shadow-xs' : 'text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                SCSS
+              </button>
+            </div>
+          )}
+
+          {language === 'javascript' && onDialectChange && (
+            <div className={`flex items-center p-0.5 rounded-md border text-[10px] font-semibold ${
+              theme === 'dark' ? 'bg-neutral-800 border-neutral-700' : 'bg-neutral-200/70 border-neutral-300'
+            }`}>
+              <button
+                type="button"
+                onClick={() => onDialectChange('javascript')}
+                className={`px-1.5 py-0.5 rounded transition-colors ${
+                  dialect !== 'typescript' ? 'bg-yellow-500 text-neutral-950 shadow-xs' : 'text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                JS
+              </button>
+              <button
+                type="button"
+                onClick={() => onDialectChange('typescript')}
+                className={`px-1.5 py-0.5 rounded transition-colors ${
+                  dialect === 'typescript' ? 'bg-blue-600 text-white shadow-xs' : 'text-neutral-400 hover:text-neutral-200'
+                }`}
+              >
+                TS
+              </button>
+            </div>
+          )}
           {suggestions && (
             <span 
               title="IntelliSense typing suggestions enabled" 

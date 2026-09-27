@@ -192,6 +192,38 @@ export function auditCode(html: string, css: string, _js: string): AuditReport {
     }
   }
 
+  // Check 10: display: none paired with :hover on the same element
+  const cssRules = css.match(/([^{}]+)\{([^}]+)\}/g) || [];
+  const displayNoneSelectors = new Set<string>();
+  const hoverSelectors: { selector: string; snippet: string }[] = [];
+
+  cssRules.forEach(rule => {
+    const parts = rule.split('{');
+    const selector = parts[0]?.trim();
+    const body = parts[1] || '';
+    if (selector && /display\s*:\s*none\b/i.test(body)) {
+      displayNoneSelectors.add(selector.replace(/\s+/g, ' '));
+    }
+    if (selector && /:hover\b/i.test(selector)) {
+      hoverSelectors.push({ selector: selector.replace(/\s+/g, ' '), snippet: rule });
+    }
+  });
+
+  hoverSelectors.forEach(({ selector, snippet }) => {
+    const baseSelector = selector.replace(/:hover\b/g, '').trim();
+    if (displayNoneSelectors.has(baseSelector)) {
+      issues.push({
+        id: 'css-hover-display-none-' + Math.random().toString(36).substring(2, 6),
+        type: 'css',
+        severity: 'error',
+        title: `":hover" will never fire on "${baseSelector}" with "display: none"`,
+        description: `Elements with "display: none" are removed from layout, so mouse hover cannot reach them. Auto-Fix will convert this to "opacity: 0 / opacity: 1" with pointer-events so hover triggers smoothly.`,
+        codeSnippet: snippet,
+        canAutoFix: true
+      });
+    }
+  });
+
   // Calculate score
   let score = 100;
   issues.forEach((issue) => {
@@ -270,6 +302,26 @@ export function autoFixCode(
   if (prevCss !== nextCss) {
     fixedCount++;
   }
+
+  // Fix 6: Resolve display: none on hovered elements to opacity
+  const hoverMatches = Array.from(nextCss.matchAll(/([^{}]+)\{([^}]+)\}/g));
+  const badHoverBases = new Set<string>();
+  hoverMatches.forEach(m => {
+    const sel = m[1].trim();
+    if (/:hover\b/i.test(sel)) {
+      badHoverBases.add(sel.replace(/:hover\b/g, '').trim());
+    }
+  });
+
+  badHoverBases.forEach(baseSel => {
+    const displayNoneRegex = new RegExp(`(${baseSel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{[^}]*?)display\\s*:\\s*none\\s*;?`, 'gi');
+    if (displayNoneRegex.test(nextCss)) {
+      nextCss = nextCss.replace(displayNoneRegex, `$1opacity: 0; pointer-events: auto; transition: opacity 0.2s ease;`);
+      const hoverDisplayBlockRegex = new RegExp(`(${baseSel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:hover\\s*\\{[^}]*?)display\\s*:\\s*(?:block|inline-block|flex|grid)\\s*;?`, 'gi');
+      nextCss = nextCss.replace(hoverDisplayBlockRegex, `$1opacity: 1;`);
+      fixedCount++;
+    }
+  });
 
   return {
     html: nextHtml,

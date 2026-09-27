@@ -48,6 +48,15 @@ import { AssetInsertModal } from './components/AssetInsertModal';
 import { CommandPaletteModal, CommandItem } from './components/CommandPaletteModal';
 import { Toast } from './components/Toast';
 import { StatusBar } from './components/StatusBar';
+import { KeyframeStudioModal } from './components/KeyframeStudioModal';
+import { GlassMeshStudioModal } from './components/GlassMeshStudioModal';
+import { PaletteContrastModal } from './components/PaletteContrastModal';
+import { VersionHistoryModal } from './components/VersionHistoryModal';
+import { CodeCardModal } from './components/CodeCardModal';
+import { ResponsiveMatrixModal } from './components/ResponsiveMatrixModal';
+import { transpileTypeScript, transpileScss } from './utils/languageTranspiler';
+import { CssDialect, JsDialect, EditorLayoutMode, CodeCheckpoint } from './types';
+import { SUI_CSS_CDN, SUI_JS_CDN } from './utils/fileUtils';
 import { 
   Play, 
   RotateCw, 
@@ -85,7 +94,12 @@ import {
   ShieldCheck,
   Box,
   Terminal,
-  X
+  X,
+  History,
+  Palette,
+  Monitor,
+  LayoutGrid,
+  Image as ImageIcon
 } from 'lucide-react';
 
 export default function App() {
@@ -189,6 +203,18 @@ export default function App() {
   const [isMobileQrOpen, setIsMobileQrOpen] = useState(false);
   const [isCodeHealthOpen, setIsCodeHealthOpen] = useState(false);
 
+  // Upgraded Feature States
+  const [editorLayoutMode, setEditorLayoutMode] = useState<EditorLayoutMode>('split-pen');
+  const [isZenMode, setIsZenMode] = useState(false);
+  const [cssDialect, setCssDialect] = useState<CssDialect>('css');
+  const [jsDialect, setJsDialect] = useState<JsDialect>('javascript');
+  const [isKeyframeStudioOpen, setIsKeyframeStudioOpen] = useState(false);
+  const [isGlassMeshStudioOpen, setIsGlassMeshStudioOpen] = useState(false);
+  const [isPaletteContrastOpen, setIsPaletteContrastOpen] = useState(false);
+  const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
+  const [isCodeCardOpen, setIsCodeCardOpen] = useState(false);
+  const [isMatrixOpen, setIsMatrixOpen] = useState(false);
+
   // Inspector & Bottom Dock State
   const [isInspectActive, setIsInspectActive] = useState(false);
   const [inspectedElement, setInspectedElement] = useState<InspectedElement | null>(null);
@@ -279,16 +305,34 @@ export default function App() {
     saveStoredSettings(nextSettings);
   }, [theme]);
 
+  // Helper to compile dialects (SCSS, TypeScript)
+  const getCompiledCode = useCallback(() => {
+    let finalCss = cssCode;
+    if (cssDialect === 'scss') {
+      const res = transpileScss(cssCode);
+      finalCss = res.code;
+    }
+
+    let finalJs = jsCode;
+    if (jsDialect === 'typescript') {
+      const res = transpileTypeScript(jsCode);
+      finalJs = res.code;
+    }
+
+    return { html: htmlCode, css: finalCss, js: finalJs };
+  }, [htmlCode, cssCode, jsCode, cssDialect, jsDialect]);
+
   // Handle Run preview
   const executeCode = useCallback(() => {
     if (!preserveLog) {
       setConsoleMessages([]);
     }
-    setPreviewHtml(htmlCode);
-    setPreviewCss(cssCode);
-    setPreviewJs(jsCode);
+    const compiled = getCompiledCode();
+    setPreviewHtml(compiled.html);
+    setPreviewCss(compiled.css);
+    setPreviewJs(compiled.js);
     addToast('Code executed', 'Preview refreshed with latest changes', 'info');
-  }, [htmlCode, cssCode, jsCode, preserveLog, addToast]);
+  }, [getCompiledCode, preserveLog, addToast]);
 
   // Format all code blocks (HTML, CSS, JS)
   const handleFormatAll = useCallback(() => {
@@ -336,9 +380,10 @@ export default function App() {
     }
 
     autoRunTimerRef.current = setTimeout(() => {
-      setPreviewHtml(htmlCode);
-      setPreviewCss(cssCode);
-      setPreviewJs(jsCode);
+      const compiled = getCompiledCode();
+      setPreviewHtml(compiled.html);
+      setPreviewCss(compiled.css);
+      setPreviewJs(compiled.js);
 
       const updated: Project = {
         ...currentProject,
@@ -357,7 +402,7 @@ export default function App() {
         clearTimeout(autoRunTimerRef.current);
       }
     };
-  }, [htmlCode, cssCode, jsCode, settings.autoRun, settings.autoRunDelay]);
+  }, [getCompiledCode, htmlCode, cssCode, jsCode, currentProject, settings.autoRun, settings.autoRunDelay]);
 
   // Auto Save when autoRun is off
   useEffect(() => {
@@ -386,7 +431,12 @@ export default function App() {
       const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform);
       const isMod = isMac ? e.metaKey : e.ctrlKey;
 
-      if (isMod && (e.key === 'k' || e.key === 'K')) {
+      if (e.key === 'Escape') {
+        setIsZenMode(false);
+      } else if (e.key === 'F11') {
+        e.preventDefault();
+        setIsZenMode(prev => !prev);
+      } else if (isMod && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault();
         setIsCommandPaletteOpen(prev => !prev);
       } else if (isMod && e.shiftKey && (e.key === 'p' || e.key === 'P')) {
@@ -782,6 +832,56 @@ export default function App() {
   const totalChars = htmlCode.length + cssCode.length + jsCode.length;
   const consoleErrorCount = consoleMessages.filter(m => m.type === 'error').length;
 
+  // Generate complete HTML bundle for Multi-Device Matrix
+  const generateMatrixSrcDoc = useCallback(() => {
+    const suiTags = currentProject.includeSui !== false
+      ? `<link rel="stylesheet" href="${SUI_CSS_CDN}">\n  <script src="${SUI_JS_CDN}"></script>`
+      : '';
+    const libTags = activeLibraries
+      .filter(l => l.enabled && l.id !== 'sui')
+      .map(lib => {
+        const parts = [];
+        if (lib.cssUrl) parts.push(`<link rel="stylesheet" href="${lib.cssUrl}">`);
+        if (lib.jsUrl) parts.push(`<script src="${lib.jsUrl}"></script>`);
+        return parts.join('\n  ');
+      })
+      .filter(Boolean)
+      .join('\n  ');
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Preview</title>
+  ${suiTags}
+  ${libTags}
+  <style>
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: ${theme === 'dark' ? '#090d16' : '#ffffff'};
+      color: ${theme === 'dark' ? '#f1f5f9' : '#0f172a'};
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    ${previewCss}
+  </style>
+</head>
+<body>
+  ${previewHtml}
+  <script>
+    try {
+      ${previewJs}
+    } catch(err) {
+      console.error(err);
+    }
+  </script>
+</body>
+</html>`;
+  }, [currentProject.includeSui, activeLibraries, theme, previewCss, previewHtml, previewJs]);
+
   // Command Palette Items
   const commandItems: CommandItem[] = [
     {
@@ -799,6 +899,63 @@ export default function App() {
       shortcut: 'Shift+Alt+F',
       icon: <Wand2 className="w-4 h-4 text-purple-500" />,
       action: handleFormatAll
+    },
+    {
+      id: 'cmd-split-pen',
+      title: 'Toggle Split-Pane Editing (CodePen Style)',
+      category: 'Layout',
+      icon: <Columns className="w-4 h-4 text-blue-500" />,
+      action: () => setEditorLayoutMode(prev => prev === 'split-pen' ? 'tabs' : 'split-pen')
+    },
+    {
+      id: 'cmd-zen-mode',
+      title: 'Toggle Zen / Presentation Mode',
+      category: 'View',
+      shortcut: 'F11',
+      icon: <Monitor className="w-4 h-4 text-purple-500" />,
+      action: () => setIsZenMode(prev => !prev)
+    },
+    {
+      id: 'cmd-keyframes',
+      title: 'CSS Keyframe & Animation Timeline Studio',
+      category: 'Studio',
+      icon: <Sparkles className="w-4 h-4 text-blue-500" />,
+      action: () => setIsKeyframeStudioOpen(true)
+    },
+    {
+      id: 'cmd-glass-mesh',
+      title: 'Mesh Gradient & Glassmorphism Studio',
+      category: 'Studio',
+      icon: <Layers className="w-4 h-4 text-purple-500" />,
+      action: () => setIsGlassMeshStudioOpen(true)
+    },
+    {
+      id: 'cmd-palette-contrast',
+      title: 'Color Palette & WCAG AAA Contrast Checker',
+      category: 'Studio',
+      icon: <Palette className="w-4 h-4 text-emerald-500" />,
+      action: () => setIsPaletteContrastOpen(true)
+    },
+    {
+      id: 'cmd-version-history',
+      title: 'Version History & Local Checkpoints',
+      category: 'Project',
+      icon: <History className="w-4 h-4 text-amber-500" />,
+      action: () => setIsVersionHistoryOpen(true)
+    },
+    {
+      id: 'cmd-code-card',
+      title: 'Export Shareable Code Card (Ray.so / Carbon)',
+      category: 'Export',
+      icon: <ImageIcon className="w-4 h-4 text-indigo-500" />,
+      action: () => setIsCodeCardOpen(true)
+    },
+    {
+      id: 'cmd-matrix',
+      title: 'Multi-Device Responsive Matrix (375px / 768px / 1200px)',
+      category: 'View',
+      icon: <LayoutGrid className="w-4 h-4 text-sky-500" />,
+      action: () => setIsMatrixOpen(true)
     },
     {
       id: 'cmd-inspect',
@@ -933,12 +1090,55 @@ export default function App() {
         theme === 'dark' ? 'bg-[#060910] text-neutral-100' : 'bg-[#f4f6fa] text-neutral-900'
       }`}
     >
+      {/* Floating Zen Mode Toolbar */}
+      {isZenMode && (
+        <div className="fixed top-3 right-5 z-50 flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-neutral-900/90 text-white backdrop-blur-md border border-neutral-700/80 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-neutral-300 mr-1.5">
+            <Monitor className="w-3.5 h-3.5 text-purple-400" />
+            <span>Zen Mode</span>
+          </div>
+          <button
+            onClick={executeCode}
+            className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1 transition-colors"
+            title="Execute Code (Ctrl+Enter)"
+          >
+            <Play className="w-3 h-3 fill-current" />
+            <span>Run</span>
+          </button>
+          <button
+            onClick={() => setEditorLayoutMode(prev => prev === 'split-pen' ? 'tabs' : 'split-pen')}
+            className="px-2 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold flex items-center gap-1 transition-colors"
+            title="Toggle Split / Tabs"
+          >
+            {editorLayoutMode === 'split-pen' ? <Rows className="w-3.5 h-3.5" /> : <Columns className="w-3.5 h-3.5" />}
+            <span>{editorLayoutMode === 'split-pen' ? 'Tabs' : 'Split'}</span>
+          </button>
+          <button
+            onClick={handleToggleTheme}
+            className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-colors"
+            title="Toggle Theme"
+          >
+            {theme === 'dark' ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-blue-400" />}
+          </button>
+          <div className="h-4 w-px bg-neutral-700 mx-0.5" />
+          <button
+            onClick={() => setIsZenMode(false)}
+            className="px-2.5 py-1 rounded-lg bg-red-600/90 hover:bg-red-600 text-white text-xs font-semibold flex items-center gap-1 transition-colors"
+            title="Exit Zen / Presentation Mode (Esc or F11)"
+          >
+            <Minimize className="w-3 h-3" />
+            <span>Exit Zen (Esc)</span>
+          </button>
+        </div>
+      )}
+
       {/* ========================================================
           1. TOP APP BAR / BRAND HEADER & COMPACT MENU BARS
       ======================================================== */}
-      <header className={`h-12 sm:h-13 px-2 sm:px-4 border-b flex items-center justify-between z-30 shrink-0 backdrop-blur-md w-full max-w-full ${
-        theme === 'dark' ? 'bg-[#090d16]/95 border-neutral-800' : 'bg-white/95 border-neutral-200/80 shadow-xs'
-      }`}>
+      {!isZenMode && (
+        <header className={`h-12 sm:h-13 px-2 sm:px-4 border-b flex items-center justify-between z-30 shrink-0 backdrop-blur-md w-full max-w-full ${
+          theme === 'dark' ? 'bg-[#090d16]/95 border-neutral-800' : 'bg-white/95 border-neutral-200/80 shadow-xs'
+        }`}>
         {/* Left Zone: Brand & Studio Menu Bars */}
         <div className="flex items-center gap-1.5 sm:gap-3 min-w-0" data-menu-container>
           {/* Logo */}
@@ -1242,6 +1442,115 @@ export default function App() {
 
                   <button
                     onClick={() => {
+                      setEditorLayoutMode(prev => prev === 'split-pen' ? 'tabs' : 'split-pen');
+                      setActiveMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Columns className="w-3.5 h-3.5 text-blue-500" />
+                      <span>{editorLayoutMode === 'split-pen' ? 'Switch to Tabs View' : 'Switch to Split-Pen View'}</span>
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsZenMode(true);
+                      setActiveMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Monitor className="w-3.5 h-3.5 text-purple-500" />
+                      <span>Zen Presentation Mode</span>
+                    </span>
+                    <kbd className="text-[10px] opacity-60">F11</kbd>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsMatrixOpen(true);
+                      setActiveMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <LayoutGrid className="w-3.5 h-3.5 text-sky-500" />
+                      <span>Multi-Device Matrix (3 Devices)</span>
+                    </span>
+                  </button>
+
+                  <div className="h-px bg-neutral-200 dark:bg-neutral-800 my-1" />
+
+                  <button
+                    onClick={() => {
+                      setIsKeyframeStudioOpen(true);
+                      setActiveMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                      <span>Keyframe Animation Studio</span>
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsGlassMeshStudioOpen(true);
+                      setActiveMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Layers className="w-3.5 h-3.5 text-purple-500" />
+                      <span>Glass & Mesh Gradient Studio</span>
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsPaletteContrastOpen(true);
+                      setActiveMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Palette className="w-3.5 h-3.5 text-emerald-500" />
+                      <span>WCAG AAA Contrast Checker</span>
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsVersionHistoryOpen(true);
+                      setActiveMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <History className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Version History & Checkpoints</span>
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsCodeCardOpen(true);
+                      setActiveMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <ImageIcon className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>Export Shareable Code Card</span>
+                    </span>
+                  </button>
+
+                  <div className="h-px bg-neutral-200 dark:bg-neutral-800 my-1" />
+
+                  <button
+                    onClick={() => {
                       handleToggleTheme();
                       setActiveMenu(null);
                     }}
@@ -1302,6 +1611,66 @@ export default function App() {
           >
             <Sliders className="w-3.5 h-3.5 text-purple-500" />
             <span className="hidden xl:inline">CSS Studio</span>
+          </button>
+
+          {/* KEYFRAME ANIMATION STUDIO BUTTON */}
+          <button
+            onClick={() => setIsKeyframeStudioOpen(true)}
+            title="CSS Keyframe & Animation Timeline Studio"
+            className="hidden xl:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30 transition-colors shrink-0"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+            <span>Timeline</span>
+          </button>
+
+          {/* MESH & GLASS STUDIO BUTTON */}
+          <button
+            onClick={() => setIsGlassMeshStudioOpen(true)}
+            title="Mesh Gradient & Glassmorphism Studio"
+            className="hidden xl:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-500/30 transition-colors shrink-0"
+          >
+            <Layers className="w-3.5 h-3.5 text-purple-500" />
+            <span>Glass & Mesh</span>
+          </button>
+
+          {/* WCAG AAA PALETTE BUTTON */}
+          <button
+            onClick={() => setIsPaletteContrastOpen(true)}
+            title="Color Palette & WCAG AAA Contrast Checker"
+            className="hidden 2xl:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 transition-colors shrink-0"
+          >
+            <Palette className="w-3.5 h-3.5 text-emerald-500" />
+            <span>WCAG Palette</span>
+          </button>
+
+          {/* VERSION HISTORY CHECKPOINTS BUTTON */}
+          <button
+            onClick={() => setIsVersionHistoryOpen(true)}
+            title="Version History & Local Checkpoints"
+            className="hidden lg:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold border border-neutral-300 dark:border-neutral-700/80 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors shrink-0"
+          >
+            <History className="w-3.5 h-3.5 text-amber-500" />
+            <span className="hidden xl:inline">Checkpoints</span>
+          </button>
+
+          {/* CODE CARD BUTTON */}
+          <button
+            onClick={() => setIsCodeCardOpen(true)}
+            title="Export Shareable Code Card (Ray.so / Carbon)"
+            className="hidden lg:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold border border-neutral-300 dark:border-neutral-700/80 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors shrink-0"
+          >
+            <ImageIcon className="w-3.5 h-3.5 text-indigo-500" />
+            <span className="hidden xl:inline">Code Card</span>
+          </button>
+
+          {/* ZEN PRESENTATION MODE BUTTON */}
+          <button
+            onClick={() => setIsZenMode(true)}
+            title="Enter Zen / Presentation Mode (F11)"
+            className="hidden md:flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold border border-neutral-300 dark:border-neutral-700/80 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors shrink-0"
+          >
+            <Monitor className="w-3.5 h-3.5 text-purple-500" />
+            <span className="hidden xl:inline">Zen</span>
           </button>
 
           {/* CODE HEALTH AUDITOR BUTTON */}
@@ -1397,81 +1766,86 @@ export default function App() {
           </button>
         </div>
       </header>
+      )}
 
       {/* ========================================================
           2. MOBILE NAVIGATION TABS (Visible on < 768px screens)
       ======================================================== */}
-      <div className={`flex md:hidden border-b px-2 py-1.5 gap-1 shrink-0 ${
-        theme === 'dark' ? 'border-neutral-800 bg-[#090d16]' : 'border-neutral-200 bg-neutral-100'
-      }`}>
-        <button
-          onClick={() => {
-            setMobileTab('html');
-            setActiveLang('html');
-          }}
-          className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-            mobileTab === 'html'
-              ? 'bg-orange-600 text-white shadow-xs'
-              : theme === 'dark'
-                ? 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
-                : 'text-neutral-700 hover:bg-neutral-200 hover:text-neutral-900'
-          }`}
-        >
-          HTML
-        </button>
-        <button
-          onClick={() => {
-            setMobileTab('css');
-            setActiveLang('css');
-          }}
-          className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-            mobileTab === 'css'
-              ? 'bg-sky-600 text-white shadow-xs'
-              : theme === 'dark'
-                ? 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
-                : 'text-neutral-700 hover:bg-neutral-200 hover:text-neutral-900'
-          }`}
-        >
-          CSS
-        </button>
-        <button
-          onClick={() => {
-            setMobileTab('js');
-            setActiveLang('javascript');
-          }}
-          className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
-            mobileTab === 'js'
-              ? 'bg-amber-600 text-white shadow-xs'
-              : theme === 'dark'
-                ? 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
-                : 'text-neutral-700 hover:bg-neutral-200 hover:text-neutral-900'
-          }`}
-        >
-          JS
-        </button>
-        <button
-          onClick={() => setMobileTab('preview')}
-          className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-            mobileTab === 'preview'
-              ? 'bg-emerald-600 text-white shadow-xs'
-              : theme === 'dark'
-                ? 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
-                : 'text-neutral-700 hover:bg-neutral-200 hover:text-neutral-900'
-          }`}
-        >
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>Preview</span>
-        </button>
-      </div>
+      {!isZenMode && (
+        <div className={`flex md:hidden border-b px-2 py-1.5 gap-1 shrink-0 ${
+          theme === 'dark' ? 'border-neutral-800 bg-[#090d16]' : 'border-neutral-200 bg-neutral-100'
+        }`}>
+          <button
+            onClick={() => {
+              setMobileTab('html');
+              setActiveLang('html');
+            }}
+            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              mobileTab === 'html'
+                ? 'bg-orange-600 text-white shadow-xs'
+                : theme === 'dark'
+                  ? 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
+                  : 'text-neutral-700 hover:bg-neutral-200 hover:text-neutral-900'
+            }`}
+          >
+            HTML
+          </button>
+          <button
+            onClick={() => {
+              setMobileTab('css');
+              setActiveLang('css');
+            }}
+            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              mobileTab === 'css'
+                ? 'bg-sky-600 text-white shadow-xs'
+                : theme === 'dark'
+                  ? 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
+                  : 'text-neutral-700 hover:bg-neutral-200 hover:text-neutral-900'
+            }`}
+          >
+            CSS
+          </button>
+          <button
+            onClick={() => {
+              setMobileTab('js');
+              setActiveLang('javascript');
+            }}
+            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              mobileTab === 'js'
+                ? 'bg-amber-600 text-white shadow-xs'
+                : theme === 'dark'
+                  ? 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
+                  : 'text-neutral-700 hover:bg-neutral-200 hover:text-neutral-900'
+            }`}
+          >
+            JS
+          </button>
+          <button
+            onClick={() => setMobileTab('preview')}
+            className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+              mobileTab === 'preview'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : theme === 'dark'
+                  ? 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
+                  : 'text-neutral-700 hover:bg-neutral-200 hover:text-neutral-900'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Preview</span>
+          </button>
+        </div>
+      )}
 
       {/* ========================================================
           QUICK INSERT BAR (1-Click Links, Stylesheets, Scripts, Buttons & Tags)
       ======================================================== */}
-      <QuickInsertBar
-        onInsertSnippet={handleInsertSnippet}
-        onOpenModal={() => setIsAssetModalOpen(true)}
-        theme={theme}
-      />
+      {!isZenMode && (
+        <QuickInsertBar
+          onInsertSnippet={handleInsertSnippet}
+          onOpenModal={() => setIsAssetModalOpen(true)}
+          theme={theme}
+        />
+      )}
 
       {/* ========================================================
           3. MAIN WORKSPACE VIEWPORT
@@ -1505,7 +1879,9 @@ export default function App() {
               language="css"
               value={cssCode}
               onChange={setCssCode}
-              title="CSS"
+              title={cssDialect.toUpperCase()}
+              dialect={cssDialect}
+              onDialectChange={setCssDialect}
               badgeColor="#0284c7"
               theme={theme}
               fontSize={settings.fontSize}
@@ -1525,7 +1901,9 @@ export default function App() {
               language="javascript"
               value={jsCode}
               onChange={setJsCode}
-              title="JavaScript"
+              title={jsDialect === 'typescript' ? 'TypeScript' : 'JavaScript'}
+              dialect={jsDialect}
+              onDialectChange={setJsDialect}
               badgeColor="#eab308"
               theme={theme}
               fontSize={settings.fontSize}
@@ -1562,6 +1940,7 @@ export default function App() {
                   onToggleInspect={handleToggleInspect}
                   onElementInspected={handleElementInspected}
                   onOpenMobileQr={() => setIsMobileQrOpen(true)}
+                  onOpenResponsiveMatrix={() => setIsMatrixOpen(true)}
                   theme={theme}
                   isFullscreen={isPreviewFullscreen}
                   onToggleFullscreen={() => setIsPreviewFullscreen(!isPreviewFullscreen)}
@@ -1651,6 +2030,65 @@ export default function App() {
 
         {/* DESKTOP VIEW (Desktop 3 Editors + Live Preview with Draggable Dividers) */}
         <div className="hidden md:flex flex-1 flex-col h-full overflow-hidden">
+          {/* Top Bar for Desktop Editor: Tab switcher or Split indicator */}
+          <div className={`flex items-center justify-between px-3 py-1.5 border-b shrink-0 ${
+            theme === 'dark' ? 'bg-[#090d16] border-neutral-800' : 'bg-neutral-100 border-neutral-200'
+          }`}>
+            {editorLayoutMode === 'tabs' ? (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setActiveLang('html')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    activeLang === 'html'
+                      ? 'bg-orange-600 text-white shadow-xs'
+                      : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-200'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-orange-400" />
+                  <span>HTML</span>
+                </button>
+                <button
+                  onClick={() => setActiveLang('css')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    activeLang === 'css'
+                      ? 'bg-sky-600 text-white shadow-xs'
+                      : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-200'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-sky-400" />
+                  <span>{cssDialect.toUpperCase()}</span>
+                </button>
+                <button
+                  onClick={() => setActiveLang('javascript')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                    activeLang === 'javascript'
+                      ? 'bg-yellow-500 text-neutral-950 shadow-xs'
+                      : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-200'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-yellow-400" />
+                  <span>{jsDialect === 'typescript' ? 'TypeScript' : 'JavaScript'}</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-xs font-semibold text-neutral-400">
+                <Columns className="w-3.5 h-3.5 text-blue-500" />
+                <span>CodePen Split-Pane (HTML · {cssDialect.toUpperCase()} · {jsDialect === 'typescript' ? 'TypeScript' : 'JavaScript'})</span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setEditorLayoutMode(prev => prev === 'split-pen' ? 'tabs' : 'split-pen')}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+                title="Toggle between side-by-side Split View and Single Tab View"
+              >
+                {editorLayoutMode === 'split-pen' ? <Rows className="w-3 h-3 text-blue-500" /> : <Columns className="w-3 h-3 text-blue-500" />}
+                <span>{editorLayoutMode === 'split-pen' ? 'Switch to Tabs' : 'Switch to Split'}</span>
+              </button>
+            </div>
+          </div>
+
           {/* TOP SECTION: 3 CODE EDITORS (HTML, CSS, JS) */}
           <div 
             style={{ height: isPreviewFullscreen ? '0%' : maximizedPanel ? '100%' : `${splitRatio}%` }}
@@ -1659,9 +2097,9 @@ export default function App() {
             }`}
           >
             {/* HTML Editor */}
-            {(!maximizedPanel || maximizedPanel === 'html') && (
+            {(editorLayoutMode === 'tabs' ? activeLang === 'html' : (!maximizedPanel || maximizedPanel === 'html')) && (
               <div 
-                style={{ width: maximizedPanel ? '100%' : `${editorCols.html}%` }} 
+                style={{ width: (editorLayoutMode === 'tabs' || maximizedPanel) ? '100%' : `${editorCols.html}%` }} 
                 className="h-full flex flex-col overflow-hidden"
               >
                 <CodeEditor
@@ -1689,7 +2127,7 @@ export default function App() {
             )}
 
             {/* Draggable Divider between HTML and CSS */}
-            {!maximizedPanel && (
+            {editorLayoutMode === 'split-pen' && !maximizedPanel && (
               <div
                 onMouseDown={(e) => handleEditorDividerMouseDown('html', 'css', e)}
                 title="Drag to resize HTML / CSS panels"
@@ -1700,16 +2138,18 @@ export default function App() {
             )}
 
             {/* CSS Editor */}
-            {(!maximizedPanel || maximizedPanel === 'css') && (
+            {(editorLayoutMode === 'tabs' ? activeLang === 'css' : (!maximizedPanel || maximizedPanel === 'css')) && (
               <div 
-                style={{ width: maximizedPanel ? '100%' : `${editorCols.css}%` }} 
+                style={{ width: (editorLayoutMode === 'tabs' || maximizedPanel) ? '100%' : `${editorCols.css}%` }} 
                 className="h-full flex flex-col overflow-hidden"
               >
                 <CodeEditor
                   language="css"
                   value={cssCode}
                   onChange={setCssCode}
-                  title="CSS"
+                  title={cssDialect.toUpperCase()}
+                  dialect={cssDialect}
+                  onDialectChange={setCssDialect}
                   badgeColor="#0284c7"
                   theme={theme}
                   fontSize={settings.fontSize}
@@ -1729,7 +2169,7 @@ export default function App() {
             )}
 
             {/* Draggable Divider between CSS and JS */}
-            {!maximizedPanel && (
+            {editorLayoutMode === 'split-pen' && !maximizedPanel && (
               <div
                 onMouseDown={(e) => handleEditorDividerMouseDown('css', 'js', e)}
                 title="Drag to resize CSS / JS panels"
@@ -1740,16 +2180,18 @@ export default function App() {
             )}
 
             {/* JS Editor */}
-            {(!maximizedPanel || maximizedPanel === 'javascript') && (
+            {(editorLayoutMode === 'tabs' ? activeLang === 'javascript' : (!maximizedPanel || maximizedPanel === 'javascript')) && (
               <div 
-                style={{ width: maximizedPanel ? '100%' : `${editorCols.js}%` }} 
+                style={{ width: (editorLayoutMode === 'tabs' || maximizedPanel) ? '100%' : `${editorCols.js}%` }} 
                 className="h-full flex flex-col overflow-hidden"
               >
                 <CodeEditor
                   language="javascript"
                   value={jsCode}
                   onChange={setJsCode}
-                  title="JavaScript"
+                  title={jsDialect === 'typescript' ? 'TypeScript' : 'JavaScript'}
+                  dialect={jsDialect}
+                  onDialectChange={setJsDialect}
                   badgeColor="#eab308"
                   theme={theme}
                   fontSize={settings.fontSize}
@@ -1806,6 +2248,7 @@ export default function App() {
                   onToggleInspect={handleToggleInspect}
                   onElementInspected={handleElementInspected}
                   onOpenMobileQr={() => setIsMobileQrOpen(true)}
+                  onOpenResponsiveMatrix={() => setIsMatrixOpen(true)}
                   theme={theme}
                   isFullscreen={isPreviewFullscreen}
                   onToggleFullscreen={() => setIsPreviewFullscreen(!isPreviewFullscreen)}
@@ -1899,25 +2342,27 @@ export default function App() {
       {/* ========================================================
           4. BOTTOM STATUS BAR
       ======================================================== */}
-      <StatusBar
-        cursorInfo={cursorInfo}
-        activeLanguage={activeLang}
-        totalLines={totalLines}
-        totalChars={totalChars}
-        autoSaveStatus={autoSaveStatus}
-        autoRun={settings.autoRun}
-        onToggleAutoRun={handleToggleAutoRun}
-        wordWrap={settings.wordWrap}
-        onToggleWordWrap={handleToggleWordWrap}
-        suggestions={settings.suggestions}
-        onToggleSuggestions={handleToggleSuggestions}
-        fontSize={settings.fontSize}
-        onChangeFontSize={handleChangeFontSize}
-        healthScore={auditReport.score}
-        onOpenCodeHealth={() => setIsCodeHealthOpen(true)}
-        onOpenCssStudio={() => setIsCssStudioOpen(true)}
-        theme={theme}
-      />
+      {!isZenMode && (
+        <StatusBar
+          cursorInfo={cursorInfo}
+          activeLanguage={activeLang}
+          totalLines={totalLines}
+          totalChars={totalChars}
+          autoSaveStatus={autoSaveStatus}
+          autoRun={settings.autoRun}
+          onToggleAutoRun={handleToggleAutoRun}
+          wordWrap={settings.wordWrap}
+          onToggleWordWrap={handleToggleWordWrap}
+          suggestions={settings.suggestions}
+          onToggleSuggestions={handleToggleSuggestions}
+          fontSize={settings.fontSize}
+          onChangeFontSize={handleChangeFontSize}
+          healthScore={auditReport.score}
+          onOpenCodeHealth={() => setIsCodeHealthOpen(true)}
+          onOpenCssStudio={() => setIsCssStudioOpen(true)}
+          theme={theme}
+        />
+      )}
 
       {/* ========================================================
           5. MODALS & OVERLAYS
@@ -2014,6 +2459,78 @@ export default function App() {
         isOpen={isAssetModalOpen}
         onClose={() => setIsAssetModalOpen(false)}
         onInsert={handleInsertSnippet}
+        theme={theme}
+      />
+
+      {/* Visual CSS Keyframe & Animation Timeline Studio */}
+      <KeyframeStudioModal
+        isOpen={isKeyframeStudioOpen}
+        onClose={() => setIsKeyframeStudioOpen(false)}
+        onInjectCss={(cssSnippet) => {
+          setCssCode(prev => prev + cssSnippet);
+          addToast('Keyframes Injected ✨', 'Added animation keyframes to stylesheet', 'success');
+        }}
+        theme={theme}
+      />
+
+      {/* Mesh Gradient & Glassmorphism Studio */}
+      <GlassMeshStudioModal
+        isOpen={isGlassMeshStudioOpen}
+        onClose={() => setIsGlassMeshStudioOpen(false)}
+        onInjectCss={(cssSnippet) => {
+          setCssCode(prev => prev + cssSnippet);
+          addToast('Styles Injected ✨', 'Added glassmorphism / mesh gradient styles', 'success');
+        }}
+        theme={theme}
+      />
+
+      {/* Color Palette & WCAG AAA Contrast Checker */}
+      <PaletteContrastModal
+        isOpen={isPaletteContrastOpen}
+        onClose={() => setIsPaletteContrastOpen(false)}
+        onInjectCss={(cssSnippet) => {
+          setCssCode(prev => cssSnippet + '\n\n' + prev);
+          addToast('Palette Injected ✨', 'Added WCAG AAA :root variables to stylesheet', 'success');
+        }}
+        theme={theme}
+      />
+
+      {/* Version History & Checkpoints */}
+      <VersionHistoryModal
+        isOpen={isVersionHistoryOpen}
+        onClose={() => setIsVersionHistoryOpen(false)}
+        projectId={currentProject.id}
+        currentHtml={htmlCode}
+        currentCss={cssCode}
+        currentJs={jsCode}
+        onRestoreCheckpoint={(cp) => {
+          setHtmlCode(cp.html);
+          setCssCode(cp.css);
+          setJsCode(cp.js);
+          setPreviewHtml(cp.html);
+          setPreviewCss(cp.css);
+          setPreviewJs(cp.js);
+          addToast('Milestone Restored', `Rolled back code to "${cp.name}"`, 'success');
+        }}
+        theme={theme}
+      />
+
+      {/* Export Shareable Code Card (Ray.so / Carbon style) */}
+      <CodeCardModal
+        isOpen={isCodeCardOpen}
+        onClose={() => setIsCodeCardOpen(false)}
+        html={htmlCode}
+        css={cssCode}
+        js={jsCode}
+        activeLanguage={activeLang}
+        theme={theme}
+      />
+
+      {/* Multi-Device Responsive Matrix */}
+      <ResponsiveMatrixModal
+        isOpen={isMatrixOpen}
+        onClose={() => setIsMatrixOpen(false)}
+        previewSrcDoc={generateMatrixSrcDoc()}
         theme={theme}
       />
 

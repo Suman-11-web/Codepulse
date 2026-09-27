@@ -860,52 +860,135 @@ export function htmlCompletions(context: CompletionContext): CompletionResult | 
 }
 
 /* ---------------------------------------------------------
-   Comprehensive CSS Properties & Values Autocomplete List
+   Comprehensive CSS Properties, Values & Selectors Autocomplete List
    --------------------------------------------------------- */
-const CSS_PROPERTIES: { prop: string; detail?: string; snippetVal?: string }[] = [
-  { prop: 'display', detail: 'flex | grid | block | none', snippetVal: 'display: ${1:flex};' },
-  { prop: 'position', detail: 'relative | absolute | fixed', snippetVal: 'position: ${1:relative};' },
+const CSS_PROPERTIES: { prop: string; detail?: string; snippetVal?: string; type?: string }[] = [
+  // Layout & Box Model
+  { prop: 'display', detail: 'flex | grid | block | inline-block | none | contents', snippetVal: 'display: ${1:flex};' },
+  { prop: 'position', detail: 'relative | absolute | fixed | sticky | static', snippetVal: 'position: ${1:relative};' },
   { prop: 'top', snippetVal: 'top: ${1:0};' },
   { prop: 'right', snippetVal: 'right: ${1:0};' },
   { prop: 'bottom', snippetVal: 'bottom: ${1:0};' },
   { prop: 'left', snippetVal: 'left: ${1:0};' },
-  { prop: 'z-index', snippetVal: 'z-index: ${1:10};' },
-  { prop: 'flex', snippetVal: 'flex: ${1:1};' },
-  { prop: 'flex-direction', snippetVal: 'flex-direction: ${1:column};' },
-  { prop: 'flex-wrap', snippetVal: 'flex-wrap: ${1:wrap};' },
-  { prop: 'justify-content', snippetVal: 'justify-content: ${1:center};' },
-  { prop: 'align-items', snippetVal: 'align-items: ${1:center};' },
-  { prop: 'align-self', snippetVal: 'align-self: ${1:center};' },
-  { prop: 'gap', snippetVal: 'gap: ${1:1rem};' },
-  { prop: 'grid', snippetVal: 'grid: ${1};' },
-  { prop: 'grid-template-columns', snippetVal: 'grid-template-columns: repeat(${1:3}, 1fr);' },
-  { prop: 'grid-template-rows', snippetVal: 'grid-template-rows: ${1:auto};' },
+  { prop: 'inset', detail: 'top right bottom left', snippetVal: 'inset: ${1:0};' },
+  { prop: 'z-index', detail: 'stack order integer', snippetVal: 'z-index: ${1:10};' },
   { prop: 'width', snippetVal: 'width: ${1:100%};' },
   { prop: 'min-width', snippetVal: 'min-width: ${1:0};' },
   { prop: 'max-width', snippetVal: 'max-width: ${1:1200px};' },
   { prop: 'height', snippetVal: 'height: ${1:100%};' },
   { prop: 'min-height', snippetVal: 'min-height: ${1:100vh};' },
   { prop: 'max-height', snippetVal: 'max-height: ${1};' },
+  { prop: 'aspect-ratio', detail: '16/9 | 1/1 | 4/3', snippetVal: 'aspect-ratio: ${1:16 / 9};' },
+  { prop: 'box-sizing', detail: 'border-box | content-box', snippetVal: 'box-sizing: ${1:border-box};' },
   { prop: 'margin', snippetVal: 'margin: ${1:0};' },
+  { prop: 'margin-top', snippetVal: 'margin-top: ${1:1rem};' },
+  { prop: 'margin-right', snippetVal: 'margin-right: ${1:1rem};' },
+  { prop: 'margin-bottom', snippetVal: 'margin-bottom: ${1:1rem};' },
+  { prop: 'margin-left', snippetVal: 'margin-left: ${1:1rem};' },
   { prop: 'padding', snippetVal: 'padding: ${1:1rem};' },
+  { prop: 'padding-top', snippetVal: 'padding-top: ${1:1rem};' },
+  { prop: 'padding-right', snippetVal: 'padding-right: ${1:1rem};' },
+  { prop: 'padding-bottom', snippetVal: 'padding-bottom: ${1:1rem};' },
+  { prop: 'padding-left', snippetVal: 'padding-left: ${1:1rem};' },
+
+  // Flexbox & Grid
+  { prop: 'flex', snippetVal: 'flex: ${1:1};' },
+  { prop: 'flex-direction', detail: 'row | column | row-reverse | column-reverse', snippetVal: 'flex-direction: ${1:column};' },
+  { prop: 'flex-wrap', detail: 'nowrap | wrap | wrap-reverse', snippetVal: 'flex-wrap: ${1:wrap};' },
+  { prop: 'flex-grow', snippetVal: 'flex-grow: ${1:1};' },
+  { prop: 'flex-shrink', snippetVal: 'flex-shrink: ${1:0};' },
+  { prop: 'flex-basis', snippetVal: 'flex-basis: ${1:auto};' },
+  { prop: 'justify-content', detail: 'center | flex-start | flex-end | space-between | space-around | space-evenly', snippetVal: 'justify-content: ${1:center};' },
+  { prop: 'align-items', detail: 'center | flex-start | flex-end | stretch | baseline', snippetVal: 'align-items: ${1:center};' },
+  { prop: 'align-self', detail: 'auto | center | flex-start | flex-end | stretch', snippetVal: 'align-self: ${1:center};' },
+  { prop: 'align-content', snippetVal: 'align-content: ${1:center};' },
+  { prop: 'gap', snippetVal: 'gap: ${1:1rem};' },
+  { prop: 'row-gap', snippetVal: 'row-gap: ${1:1rem};' },
+  { prop: 'column-gap', snippetVal: 'column-gap: ${1:1rem};' },
+  { prop: 'grid', snippetVal: 'grid: ${1};' },
+  { prop: 'grid-template-columns', snippetVal: 'grid-template-columns: repeat(${1:3}, 1fr);' },
+  { prop: 'grid-template-rows', snippetVal: 'grid-template-rows: ${1:auto};' },
+  { prop: 'grid-column', snippetVal: 'grid-column: span ${1:2};' },
+  { prop: 'grid-row', snippetVal: 'grid-row: span ${1:2};' },
+  { prop: 'place-items', detail: 'align-items and justify-items shorthand', snippetVal: 'place-items: ${1:center};' },
+  { prop: 'place-content', snippetVal: 'place-content: ${1:center};' },
+
+  // Typography & Text
   { prop: 'color', snippetVal: 'color: ${1:#ffffff};' },
-  { prop: 'background', snippetVal: 'background: ${1};' },
-  { prop: 'background-color', snippetVal: 'background-color: ${1:#1e293b};' },
-  { prop: 'background-size', snippetVal: 'background-size: cover;' },
-  { prop: 'font-family', snippetVal: "font-family: system-ui, -apple-system, sans-serif;" },
+  { prop: 'font-family', snippetVal: "font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;" },
   { prop: 'font-size', snippetVal: 'font-size: ${1:1rem};' },
-  { prop: 'font-weight', snippetVal: 'font-weight: ${1:600};' },
+  { prop: 'font-weight', detail: '100 - 900 | bold | normal', snippetVal: 'font-weight: ${1:600};' },
   { prop: 'line-height', snippetVal: 'line-height: ${1:1.5};' },
-  { prop: 'text-align', snippetVal: 'text-align: ${1:center};' },
-  { prop: 'text-decoration', snippetVal: 'text-decoration: ${1:none};' },
+  { prop: 'letter-spacing', snippetVal: 'letter-spacing: ${1:0.05em};' },
+  { prop: 'text-align', detail: 'left | center | right | justify', snippetVal: 'text-align: ${1:center};' },
+  { prop: 'text-decoration', detail: 'none | underline | line-through', snippetVal: 'text-decoration: ${1:none};' },
+  { prop: 'text-transform', detail: 'uppercase | lowercase | capitalize | none', snippetVal: 'text-transform: ${1:uppercase};' },
+  { prop: 'text-overflow', detail: 'ellipsis | clip', snippetVal: 'text-overflow: ${1:ellipsis};' },
+  { prop: 'text-shadow', snippetVal: 'text-shadow: 0 2px 4px rgba(0, 0, 0, ${1:0.2});' },
+  { prop: 'white-space', detail: 'normal | nowrap | pre | pre-wrap', snippetVal: 'white-space: ${1:nowrap};' },
+  { prop: 'word-break', detail: 'normal | break-all | keep-all | break-word', snippetVal: 'word-break: ${1:break-word};' },
+
+  // Background & Borders
+  { prop: 'background', snippetVal: 'background: ${1:#0f172a};' },
+  { prop: 'background-color', snippetVal: 'background-color: ${1:#1e293b};' },
+  { prop: 'background-image', snippetVal: 'background-image: ${1:linear-gradient(135deg, #6366f1, #a855f7)};' },
+  { prop: 'background-size', detail: 'cover | contain | auto', snippetVal: 'background-size: ${1:cover};' },
+  { prop: 'background-position', detail: 'center | top | bottom | left | right', snippetVal: 'background-position: ${1:center};' },
+  { prop: 'background-repeat', detail: 'no-repeat | repeat | repeat-x | repeat-y', snippetVal: 'background-repeat: no-repeat;' },
+  { prop: 'background-clip', detail: 'border-box | padding-box | content-box | text', snippetVal: 'background-clip: ${1:text};' },
   { prop: 'border', snippetVal: 'border: 1px solid ${1:#e2e8f0};' },
   { prop: 'border-radius', snippetVal: 'border-radius: ${1:8px};' },
-  { prop: 'box-shadow', snippetVal: 'box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);' },
+  { prop: 'border-color', snippetVal: 'border-color: ${1:#3b82f6};' },
+  { prop: 'border-width', snippetVal: 'border-width: ${1:1px};' },
+  { prop: 'border-style', detail: 'solid | dashed | dotted | none', snippetVal: 'border-style: ${1:solid};' },
+  { prop: 'outline', snippetVal: 'outline: 2px solid ${1:#3b82f6};' },
+  { prop: 'outline-offset', snippetVal: 'outline-offset: ${1:2px};' },
+  { prop: 'box-shadow', snippetVal: 'box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);' },
+
+  // Visual Effects, Transforms & Filters
   { prop: 'opacity', snippetVal: 'opacity: ${1:1};' },
-  { prop: 'overflow', snippetVal: 'overflow: ${1:hidden};' },
-  { prop: 'cursor', snippetVal: 'cursor: pointer;' },
-  { prop: 'transition', snippetVal: 'transition: all 0.2s ease;' },
-  { prop: 'transform', snippetVal: 'transform: ${1:scale(1.05)};' }
+  { prop: 'transform', snippetVal: 'transform: ${1:translateY(-2px)};' },
+  { prop: 'transform-origin', snippetVal: 'transform-origin: ${1:center};' },
+  { prop: 'transition', snippetVal: 'transition: all ${1:0.2s} ease;' },
+  { prop: 'transition-property', snippetVal: 'transition-property: ${1:all};' },
+  { prop: 'transition-duration', snippetVal: 'transition-duration: ${1:0.3s};' },
+  { prop: 'transition-timing-function', detail: 'ease | linear | ease-in | ease-out | ease-in-out | cubic-bezier', snippetVal: 'transition-timing-function: ${1:ease-in-out};' },
+  { prop: 'filter', detail: 'blur() | brightness() | contrast() | drop-shadow() | grayscale()', snippetVal: 'filter: ${1:blur(4px)};' },
+  { prop: 'backdrop-filter', detail: 'blur() | saturate() | brightness()', snippetVal: 'backdrop-filter: blur(${1:12px});' },
+  { prop: 'clip-path', snippetVal: 'clip-path: ${1:polygon(0 0, 100% 0, 100% 100%, 0 100%)};' },
+  { prop: 'overflow', detail: 'hidden | visible | auto | scroll', snippetVal: 'overflow: ${1:hidden};' },
+  { prop: 'overflow-x', snippetVal: 'overflow-x: ${1:auto};' },
+  { prop: 'overflow-y', snippetVal: 'overflow-y: ${1:auto};' },
+
+  // Animations & Keyframes
+  { prop: 'animation', snippetVal: 'animation: ${1:spin} ${2:1s} ${3:linear} ${4:infinite};' },
+  { prop: 'animation-name', snippetVal: 'animation-name: ${1:fadeIn};' },
+  { prop: 'animation-duration', snippetVal: 'animation-duration: ${1:0.5s};' },
+  { prop: 'animation-timing-function', snippetVal: 'animation-timing-function: ${1:ease-in-out};' },
+  { prop: 'animation-iteration-count', detail: 'infinite | 1 | 2...', snippetVal: 'animation-iteration-count: ${1:infinite};' },
+  { prop: 'animation-fill-mode', detail: 'forwards | backwards | both', snippetVal: 'animation-fill-mode: ${1:forwards};' },
+  { prop: 'animation-delay', snippetVal: 'animation-delay: ${1:0.2s};' },
+
+  // User Interaction & System
+  { prop: 'cursor', detail: 'pointer | default | not-allowed | grab | text', snippetVal: 'cursor: pointer;' },
+  { prop: 'pointer-events', detail: 'auto | none', snippetVal: 'pointer-events: ${1:auto};' },
+  { prop: 'user-select', detail: 'none | auto | text | all', snippetVal: 'user-select: none;' },
+  { prop: 'scroll-behavior', detail: 'smooth | auto', snippetVal: 'scroll-behavior: smooth;' },
+  { prop: 'accent-color', snippetVal: 'accent-color: ${1:#3b82f6};' },
+  { prop: 'content', detail: 'Generated content for ::before / ::after', snippetVal: 'content: "${1}";' },
+  { prop: 'visibility', detail: 'visible | hidden | collapse', snippetVal: 'visibility: ${1:hidden};' },
+  { prop: 'will-change', detail: 'transform | opacity | scroll-position', snippetVal: 'will-change: ${1:transform};' },
+
+  // Selectors & Pseudo-Classes (Direct snippets)
+  { prop: ':hover', detail: 'State when mouse is over element', snippetVal: ':hover {\n  ${0}\n}' },
+  { prop: ':focus', detail: 'State when element receives focus', snippetVal: ':focus {\n  outline: 2px solid ${1:#3b82f6};\n  outline-offset: 2px;\n}' },
+  { prop: ':focus-visible', detail: 'Accessible keyboard focus state', snippetVal: ':focus-visible {\n  outline: 2px solid ${1:#3b82f6};\n  outline-offset: 2px;\n}' },
+  { prop: ':active', detail: 'State when element is being clicked', snippetVal: ':active {\n  transform: scale(${1:0.98});\n}' },
+  { prop: '::before', detail: 'Pseudo-element inserted before content', snippetVal: '::before {\n  content: "";\n  ${0}\n}' },
+  { prop: '::after', detail: 'Pseudo-element inserted after content', snippetVal: '::after {\n  content: "";\n  ${0}\n}' },
+  { prop: ':root', detail: 'CSS custom properties root selector', snippetVal: ':root {\n  --primary: ${1:#6366f1};\n  --bg: ${2:#0f172a};\n  --text: ${3:#f8fafc};\n}' },
+  { prop: '@keyframes', detail: 'Define CSS animation keyframes', snippetVal: '@keyframes ${1:pulse} {\n  0% { transform: scale(1); opacity: 1; }\n  50% { transform: scale(1.05); opacity: 0.8; }\n  100% { transform: scale(1); opacity: 1; }\n}' },
+  { prop: '@media', detail: 'Responsive media query breakpoint', snippetVal: '@media (max-width: ${1:768px}) {\n  ${0}\n}' }
 ];
 
 export function cssCompletions(context: CompletionContext): CompletionResult | null {
@@ -921,7 +1004,7 @@ export function cssCompletions(context: CompletionContext): CompletionResult | n
     if (node.name === 'StringLiteral' || node.name === 'Comment' || node.name === 'BlockComment') return null;
   } catch (e) {}
 
-  const word = context.matchBefore(/[a-zA-Z0-9_\-]*/);
+  const word = context.matchBefore(/[:@a-zA-Z0-9_\-]*/);
   if (!word || (word.from === word.to && !context.explicit)) return null;
 
   return {
@@ -929,7 +1012,7 @@ export function cssCompletions(context: CompletionContext): CompletionResult | n
     options: CSS_PROPERTIES.map(item => ({
       label: item.prop,
       apply: snippet(item.snippetVal || `${item.prop}: \${0};`),
-      type: 'property',
+      type: item.prop.startsWith(':') || item.prop.startsWith('@') ? 'keyword' : 'property',
       detail: item.detail || 'CSS property'
     }))
   };
@@ -939,26 +1022,68 @@ export function cssCompletions(context: CompletionContext): CompletionResult | n
    JavaScript DOM & Built-in Snippets Autocomplete List
    --------------------------------------------------------- */
 const JS_SNIPPETS = [
+  // Console
   { label: 'console.log', apply: snippet('console.log(${0});'), detail: 'Log message to console' },
   { label: 'console.warn', apply: snippet('console.warn(${0});'), detail: 'Log warning to console' },
   { label: 'console.error', apply: snippet('console.error(${0});'), detail: 'Log error to console' },
   { label: 'console.table', apply: snippet('console.table(${0});'), detail: 'Log data in table format' },
+  { label: 'console.time', apply: snippet('console.time("${1:timer}");\n${0}\nconsole.timeEnd("${1:timer}");'), detail: 'Benchmark execution time' },
+
+  // DOM Selection & Elements
   { label: 'document.getElementById', apply: snippet('document.getElementById("${1:id}")'), detail: 'Select element by ID' },
   { label: 'document.querySelector', apply: snippet('document.querySelector("${1:selector}")'), detail: 'Query single element' },
-  { label: 'document.querySelectorAll', apply: snippet('document.querySelectorAll("${1:selector}")'), detail: 'Query all elements' },
+  { label: 'document.querySelectorAll', apply: snippet('document.querySelectorAll("${1:selector}")'), detail: 'Query all elements matching selector' },
+  { label: 'document.createElement', apply: snippet('const ${1:el} = document.createElement("${2:div}");'), detail: 'Create a new DOM node' },
+  { label: 'element.appendChild', apply: snippet('${1:parent}.appendChild(${2:child});'), detail: 'Append child element' },
+  { label: 'element.addEventListener', apply: snippet('${1:element}.addEventListener("${2:click}", (e) => {\n  ${0}\n});'), detail: 'Attach event listener' },
+  { label: 'element.classList.add', apply: snippet('${1:element}.classList.add("${2:className}");'), detail: 'Add CSS class' },
+  { label: 'element.classList.remove', apply: snippet('${1:element}.classList.remove("${2:className}");'), detail: 'Remove CSS class' },
+  { label: 'element.classList.toggle', apply: snippet('${1:element}.classList.toggle("${2:className}");'), detail: 'Toggle CSS class' },
+  { label: 'element.setAttribute', apply: snippet('${1:element}.setAttribute("${2:attr}", "${3:val}");'), detail: 'Set HTML attribute' },
+  { label: 'element.getAttribute', apply: snippet('${1:element}.getAttribute("${2:attr}")'), detail: 'Get HTML attribute' },
+  { label: 'element.innerHTML', apply: snippet('${1:element}.innerHTML = `${2:content}`;'), detail: 'Set element inner HTML' },
+  { label: 'element.textContent', apply: snippet('${1:element}.textContent = "${2:text}";'), detail: 'Set element text content' },
+  { label: 'element.style', apply: snippet('${1:element}.style.${2:display} = "${3:block}";'), detail: 'Direct inline style' },
+
+  // Events & Timing
   { label: 'addEventListener', apply: snippet('addEventListener("${1:click}", (event) => {\n  ${0}\n});'), detail: 'Attach event listener' },
   { label: 'setTimeout', apply: snippet('setTimeout(() => {\n  ${0}\n}, ${1:1000});'), detail: 'Execute once after delay' },
   { label: 'setInterval', apply: snippet('setInterval(() => {\n  ${0}\n}, ${1:1000});'), detail: 'Execute periodically' },
-  { label: 'fetch', apply: snippet('fetch("${1:https://api.example.com}")\n  .then(res => res.json())\n  .then(data => {\n    ${0}\n  })\n  .catch(err => console.error(err));'), detail: 'Fetch API request' },
-  { label: 'async/await function', apply: snippet('async function ${1:fetchData}() {\n  try {\n    const response = await fetch("${2:url}");\n    const data = await response.json();\n    ${0}\n  } catch (err) {\n    console.error(err);\n  }\n}'), detail: 'Async function with try/catch' },
+  { label: 'requestAnimationFrame', apply: snippet('function loop() {\n  ${0}\n  requestAnimationFrame(loop);\n}\nrequestAnimationFrame(loop);'), detail: 'Smooth 60fps animation loop' },
+
+  // HTTP & Asynchronous
+  { label: 'fetch (JSON)', apply: snippet('fetch("${1:https://api.example.com/data}")\n  .then(res => res.json())\n  .then(data => {\n    ${0}\n  })\n  .catch(err => console.error(err));'), detail: 'Fetch API GET JSON' },
+  { label: 'async/await function', apply: snippet('async function ${1:loadData}() {\n  try {\n    const response = await fetch("${2:url}");\n    const data = await response.json();\n    ${0}\n  } catch (err) {\n    console.error(err);\n  }\n}'), detail: 'Async function with try/catch' },
+  { label: 'new Promise', apply: snippet('new Promise((resolve, reject) => {\n  ${0}\n});'), detail: 'Create a new Promise' },
+  { label: 'Promise.all', apply: snippet('Promise.all([${1:promise1}, ${2:promise2}]).then(([res1, res2]) => {\n  ${0}\n});'), detail: 'Wait for all promises' },
+
+  // Storage
+  { label: 'localStorage.setItem', apply: snippet('localStorage.setItem("${1:key}", JSON.stringify(${2:value}));'), detail: 'Save data to localStorage' },
+  { label: 'localStorage.getItem', apply: snippet('JSON.parse(localStorage.getItem("${1:key}") || "null")'), detail: 'Read data from localStorage' },
+
+  // Array Methods
+  { label: 'array.map', apply: snippet('${1:array}.map((${2:item}) => ${3:item})'), detail: 'Array map transform' },
+  { label: 'array.filter', apply: snippet('${1:array}.filter((${2:item}) => ${3:item})'), detail: 'Array filter condition' },
+  { label: 'array.reduce', apply: snippet('${1:array}.reduce((acc, curr) => acc + curr, 0)'), detail: 'Array reduce accumulator' },
+  { label: 'array.forEach', apply: snippet('${1:array}.forEach((${2:item}) => {\n  ${0}\n});'), detail: 'Array forEach loop' },
+  { label: 'array.find', apply: snippet('${1:array}.find((${2:item}) => ${3:item.id === id})'), detail: 'Find first matching element' },
+  { label: 'array.includes', apply: snippet('${1:array}.includes(${2:item})'), detail: 'Check if array contains value' },
+
+  // Objects & JSON
+  { label: 'JSON.stringify', apply: snippet('JSON.stringify(${1:object}, null, 2)'), detail: 'Convert object to JSON string' },
+  { label: 'JSON.parse', apply: snippet('JSON.parse(${1:jsonString})'), detail: 'Parse JSON string to object' },
+  { label: 'Object.keys', apply: snippet('Object.keys(${1:object})'), detail: 'Get object keys array' },
+  { label: 'Object.values', apply: snippet('Object.values(${1:object})'), detail: 'Get object values array' },
+  { label: 'Object.entries', apply: snippet('Object.entries(${1:object})'), detail: 'Get object [key, value] pairs' },
+
+  // Functions & Control Flow
   { label: 'function', apply: snippet('function ${1:name}(${2:params}) {\n  ${0}\n}'), detail: 'Function declaration' },
   { label: 'arrow function', apply: snippet('const ${1:name} = (${2:params}) => {\n  ${0}\n};'), detail: 'Arrow function expression' },
   { label: 'const', apply: snippet('const ${1:name} = ${0};'), detail: 'Declare constant' },
   { label: 'let', apply: snippet('let ${1:name} = ${0};'), detail: 'Declare mutable variable' },
   { label: 'if statement', apply: snippet('if (${1:condition}) {\n  ${0}\n}'), detail: 'If block' },
   { label: 'if/else statement', apply: snippet('if (${1:condition}) {\n  ${2}\n} else {\n  ${0}\n}'), detail: 'If-else block' },
-  { label: 'for loop', apply: snippet('for (let ${1:i} = 0; ${1:i} < ${2:array}.length; ${1:i}++) {\n  ${0}\n}'), detail: 'Indexed loop' },
-  { label: 'forEach loop', apply: snippet('${1:array}.forEach((${2:item}) => {\n  ${0}\n});'), detail: 'Array forEach iteration' },
+  { label: 'for loop', apply: snippet('for (let ${1:i} = 0; ${1:i} < ${2:10}; ${1:i}++) {\n  ${0}\n}'), detail: 'For indexed loop' },
   { label: 'try/catch', apply: snippet('try {\n  ${0}\n} catch (err) {\n  console.error(err);\n}'), detail: 'Exception handling' }
 ];
 

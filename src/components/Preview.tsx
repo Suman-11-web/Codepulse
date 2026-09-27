@@ -38,6 +38,7 @@ interface PreviewProps {
   onToggleInspect?: () => void;
   onElementInspected?: (el: InspectedElement, domTree: DomTreeNode) => void;
   onOpenMobileQr?: () => void;
+  onOpenResponsiveMatrix?: () => void;
   theme: ThemeMode;
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
@@ -63,6 +64,7 @@ export const Preview: React.FC<PreviewProps> = ({
   onToggleInspect,
   onElementInspected,
   onOpenMobileQr,
+  onOpenResponsiveMatrix,
   theme,
   isFullscreen = false,
   onToggleFullscreen,
@@ -800,6 +802,16 @@ ${internalHeadAssets}
               <Smartphone className="w-3.5 h-3.5" />
               <span className="text-[11px] hidden md:inline">375px</span>
             </button>
+            {onOpenResponsiveMatrix && (
+              <button
+                onClick={onOpenResponsiveMatrix}
+                className="px-2 py-1 rounded-md text-xs flex items-center gap-1 font-semibold transition-all text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
+                title="Open Multi-Device Responsive Matrix (Mobile + Tablet + Desktop side-by-side)"
+              >
+                <Monitor className="w-3.5 h-3.5 text-purple-500" />
+                <span className="text-[11px] hidden md:inline">Matrix</span>
+              </button>
+            )}
           </div>
 
           {/* Orientation Rotate Button (For mobile/tablet) */}

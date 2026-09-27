@@ -1,8 +1,23 @@
 export type EditorLanguage = 'html' | 'css' | 'javascript';
 
+export type CssDialect = 'css' | 'scss';
+export type JsDialect = 'javascript' | 'typescript';
+export type EditorLayoutMode = 'tabs' | 'split-pen';
+
 export type DeviceMode = 'desktop' | 'tablet' | 'mobile';
 
 export type ThemeMode = 'dark' | 'light';
+
+export interface CodeCheckpoint {
+  id: string;
+  name: string;
+  timestamp: number;
+  html: string;
+  css: string;
+  js: string;
+  cssDialect?: CssDialect;
+  jsDialect?: JsDialect;
+}
 
 export interface ConsoleMessage {
   id: string;
