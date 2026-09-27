@@ -44,7 +44,9 @@ button:hover {
 button:active {
     transform: translateY(0);
 }`,
-    js: `// Interactive button listener
+    js: `// Interactive button listener & Console verification
+console.log("🚀 SUI CodePulse ready! Click 'Click Me' or edit JavaScript to see live console output.");
+
 document.getElementById("btn").addEventListener("click", () => {
     alert("Hello from the Live Code Editor!");
     console.log("Button clicked successfully at: " + new Date().toLocaleTimeString());

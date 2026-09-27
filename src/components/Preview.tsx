@@ -43,6 +43,7 @@ interface PreviewProps {
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
   iframeRef?: React.RefObject<HTMLIFrameElement | null>;
+  executionCount?: number;
 }
 
 export const Preview: React.FC<PreviewProps> = ({
@@ -68,7 +69,8 @@ export const Preview: React.FC<PreviewProps> = ({
   theme,
   isFullscreen = false,
   onToggleFullscreen,
-  iframeRef: externalIframeRef
+  iframeRef: externalIframeRef,
+  executionCount = 0
 }) => {
   const localIframeRef = useRef<HTMLIFrameElement | null>(null);
   const activeIframeRef = externalIframeRef || localIframeRef;
@@ -108,7 +110,10 @@ export const Preview: React.FC<PreviewProps> = ({
       .filter(Boolean)
       .join('\n  ');
 
-    const safeJsPayload = JSON.stringify(js);
+    const safeUserJs = js ? js.replace(/<\/script/gi, '<\\/script') : '';
+    const userScriptTag = safeUserJs.trim()
+      ? `\n  <script id="__codepulse_user_code__">\n${safeUserJs}\n  <\/script>`
+      : '';
 
     const hasDocType = /<!DOCTYPE/i.test(html);
     const hasHtmlTag = /<html/i.test(html);
@@ -250,20 +255,46 @@ export const Preview: React.FC<PreviewProps> = ({
         return serialize(obj, 0);
       }
 
+      var msgSequence = 0;
+
       function sendToParent(type, args, resultType, tableData) {
         try {
-          const serializable = Array.from(args).map(function(arg) {
+          var serializable = Array.from(args).map(function(arg) {
             if (typeof arg === 'string') return arg;
             return safeStringify(arg);
           });
 
-          window.parent.postMessage({
+          var msgId = 'cp_' + Date.now() + '_' + (++msgSequence) + '_' + Math.random().toString(36).substring(2, 7);
+
+          var payload = {
             source: 'codepulse-preview',
+            msgId: msgId,
             type: type,
             content: serializable,
             resultType: resultType,
             tableData: tableData
-          }, '*');
+          };
+
+          // 1. Direct parent hook (instant & synchronous)
+          try {
+            if (window.parent && typeof window.parent.__CODEPULSE_CONSOLE_HOOK__ === 'function') {
+              window.parent.__CODEPULSE_CONSOLE_HOOK__(payload);
+            }
+          } catch(e1) {}
+
+          // 2. postMessage to parent (cross-origin / backup delivery)
+          try {
+            if (window.parent && window.parent.postMessage) {
+              window.parent.postMessage(payload, '*');
+            }
+          } catch(e2) {}
+
+          // 3. postMessage to self (in case popup or standalone)
+          try {
+            if (window.postMessage) {
+              window.postMessage(payload, '*');
+            }
+          } catch(e3) {}
         } catch(e) {}
       }
 
@@ -275,26 +306,26 @@ export const Preview: React.FC<PreviewProps> = ({
 
       console.log = function() {
         sendToParent('log', arguments);
-        if (origLog) origLog.apply(console, arguments);
+        if (origLog) { try { origLog.apply(console, arguments); } catch(e) {} }
       };
       console.info = function() {
         sendToParent('info', arguments);
-        if (origInfo) origInfo.apply(console, arguments);
+        if (origInfo) { try { origInfo.apply(console, arguments); } catch(e) {} }
       };
       console.warn = function() {
         sendToParent('warn', arguments);
-        if (origWarn) origWarn.apply(console, arguments);
+        if (origWarn) { try { origWarn.apply(console, arguments); } catch(e) {} }
       };
       console.error = function() {
         sendToParent('error', arguments);
-        if (origError) origError.apply(console, arguments);
+        if (origError) { try { origError.apply(console, arguments); } catch(e) {} }
       };
       console.debug = function() {
         sendToParent('info', arguments);
       };
       console.clear = function() {
         sendToParent('clear', []);
-        if (origClear) origClear.apply(console);
+        if (origClear) { try { origClear.apply(console); } catch(e) {} }
       };
 
       console.count = function(label = 'default') {
@@ -353,19 +384,79 @@ export const Preview: React.FC<PreviewProps> = ({
         sendToParent('log', [safeStringify(data, 5)]);
       };
 
+      function showInPreviewAlert(msg) {
+        try {
+          var existing = document.getElementById('__codepulse_alert_modal__');
+          if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+          var overlay = document.createElement('div');
+          overlay.id = '__codepulse_alert_modal__';
+          overlay.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:2147483647;display:flex;align-items:center;gap:12px;background:#0f172a;color:#f8fafc;padding:10px 18px;border-radius:10px;box-shadow:0 12px 28px -4px rgba(0,0,0,0.5);border:1px solid #334155;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:13px;max-width:90%;';
+
+          var textSpan = document.createElement('span');
+          textSpan.style.cssText = 'display:flex;align-items:center;gap:6px;';
+          var strongTag = document.createElement('strong');
+          strongTag.style.color = '#38bdf8';
+          strongTag.textContent = '📢 Alert:';
+          var msgNode = document.createTextNode(' ' + msg);
+          textSpan.appendChild(strongTag);
+          textSpan.appendChild(msgNode);
+
+          var btn = document.createElement('button');
+          btn.textContent = 'OK';
+          btn.style.cssText = 'background:#2563eb;color:#ffffff;border:none;padding:4px 14px;border-radius:6px;font-weight:700;font-size:12px;cursor:pointer;outline:none;';
+          btn.onclick = function() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); };
+
+          overlay.appendChild(textSpan);
+          overlay.appendChild(btn);
+
+          if (document.body) {
+            document.body.appendChild(overlay);
+          } else if (document.documentElement) {
+            document.documentElement.appendChild(overlay);
+          }
+
+          setTimeout(function() {
+            if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+          }, 4500);
+        } catch(e) {}
+      }
+
       window.alert = function(msg) {
-        sendToParent('info', ['📢 [Alert]: ' + String(msg)]);
+        var str = String(msg === undefined ? '' : msg);
+        sendToParent('info', ['📢 [Alert]: ' + str]);
+        showInPreviewAlert(str);
       };
 
-      window.onerror = function(message, source, lineno, colno, error) {
-        let lineInfo = '';
-        if (lineno) lineInfo = ' (Line ' + lineno + (colno ? ':' + colno : '') + ')';
-        sendToParent('error', ['❌ ' + message + lineInfo]);
+      window.confirm = function(msg) {
+        var str = String(msg === undefined ? '' : msg);
+        sendToParent('info', ['❓ [Confirm]: ' + str]);
         return true;
       };
 
+      window.prompt = function(msg, defaultVal) {
+        var str = String(msg === undefined ? '' : msg);
+        sendToParent('info', ['💬 [Prompt]: ' + str + (defaultVal ? ' (Default: ' + defaultVal + ')' : '')]);
+        return defaultVal || null;
+      };
+
+      window.onerror = function(message, source, lineno, colno, error) {
+        var lineInfo = '';
+        if (lineno) lineInfo = ' (Line ' + lineno + (colno ? ':' + colno : '') + ')';
+        var errMsg = '';
+        if (error && error.stack) {
+          errMsg = error.stack;
+        } else if (error && error.message) {
+          errMsg = error.name ? (error.name + ': ' + error.message) : error.message;
+        } else {
+          errMsg = String(message || 'Unknown error');
+        }
+        sendToParent('error', ['❌ ' + errMsg + lineInfo]);
+        return false;
+      };
+
       window.onunhandledrejection = function(event) {
-        const reason = event.reason ? (event.reason.message || String(event.reason)) : 'Unknown';
+        var reason = event.reason ? ((event.reason && event.reason.stack) || event.reason.message || String(event.reason)) : 'Unknown';
         sendToParent('error', ['❌ Unhandled Promise: ' + reason]);
       };
 
@@ -581,35 +672,11 @@ export const Preview: React.FC<PreviewProps> = ({
 
             sendToParent('result', [displayStr], rType);
           } catch(evalErr) {
-            sendToParent('error', ['❌ ' + evalErr.name + ': ' + evalErr.message]);
+            var errStr = (evalErr && evalErr.stack) ? evalErr.stack : (evalErr && evalErr.message) ? (evalErr.name + ': ' + evalErr.message) : String(evalErr);
+            sendToParent('error', ['❌ ' + errStr]);
           }
         }
       });
-    })();
-
-    // Safe isolated runner for user JavaScript
-    (function() {
-      var executed = false;
-      function runScript() {
-        if (executed) return;
-        executed = true;
-        try {
-          var userCode = ${safeJsPayload};
-          if (!userCode || !userCode.trim()) return;
-          var scriptEl = document.createElement('script');
-          scriptEl.type = 'text/javascript';
-          scriptEl.text = userCode;
-          document.body.appendChild(scriptEl);
-        } catch(err) {
-          console.error("Runtime Error: " + err.message);
-        }
-      }
-
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', runScript);
-      } else {
-        setTimeout(runScript, 0);
-      }
     })();
   </script>`;
 
@@ -622,6 +689,14 @@ export const Preview: React.FC<PreviewProps> = ({
       } else {
         result = `<head>${internalHeadAssets}</head>${result}`;
       }
+
+      if (userScriptTag) {
+        if (/<\/body>/i.test(result)) {
+          result = result.replace(/<\/body>/i, `${userScriptTag}\n</body>`);
+        } else {
+          result = `${result}${userScriptTag}`;
+        }
+      }
       return result;
     }
 
@@ -632,6 +707,7 @@ ${internalHeadAssets}
 </head>
 <body class="${effectiveTheme === 'dark' ? 'dark-preview' : 'light-preview'}">
   ${html}
+  ${userScriptTag}
 </body>
 </html>`;
   };
@@ -670,6 +746,7 @@ ${internalHeadAssets}
           }
         } else {
           onConsoleMessage({
+            msgId: event.data.msgId,
             type: event.data.type,
             content: event.data.content,
             resultType: event.data.resultType,
@@ -962,7 +1039,7 @@ ${internalHeadAssets}
           )}
 
           <iframe
-            key={`${refreshKey}-${effectiveTheme}-${includeSui}`}
+            key={`preview-${refreshKey}-${executionCount || 0}-${effectiveTheme}-${includeSui}`}
             ref={(node) => {
               if (externalIframeRef) {
                 (externalIframeRef as React.MutableRefObject<HTMLIFrameElement | null>).current = node;

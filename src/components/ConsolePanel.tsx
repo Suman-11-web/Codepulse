@@ -235,11 +235,12 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
   const errorCount = messages.filter(m => m.type === 'error').length;
   const warnCount = messages.filter(m => m.type === 'warn').length;
   const infoCount = messages.filter(m => m.type === 'info').length;
+  const logCount = messages.filter(m => m.type === 'log' || m.type === 'result' || m.type === 'table').length;
 
   const filteredMessages = aggregatedMessages.filter(m => {
     if (filter === 'error' && m.type !== 'error') return false;
     if (filter === 'warn' && m.type !== 'warn') return false;
-    if (filter === 'log' && m.type !== 'log' && m.type !== 'result') return false;
+    if (filter === 'log' && m.type !== 'log' && m.type !== 'result' && m.type !== 'table') return false;
     if (filter === 'info' && m.type !== 'info') return false;
 
     if (searchQuery.trim()) {
@@ -408,13 +409,18 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
             </button>
             <button
               onClick={() => setFilter('log')}
-              className={`px-2 py-0.5 rounded-md font-medium transition-colors ${
+              className={`px-2 py-0.5 rounded-md font-medium transition-colors flex items-center gap-1 ${
                 filter === 'log' 
                   ? 'bg-white dark:bg-neutral-700 text-neutral-900 dark:text-white shadow-xs' 
-                  : 'text-neutral-500 hover:text-neutral-800'
+                  : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-300'
               }`}
             >
-              Logs
+              <span>Logs</span>
+              {logCount > 0 && (
+                <span className="px-1 py-0.2 text-[9px] font-bold rounded-full bg-neutral-400/80 dark:bg-neutral-600 text-white">
+                  {logCount}
+                </span>
+              )}
             </button>
           </div>
 

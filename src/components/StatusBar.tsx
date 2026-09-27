@@ -1,6 +1,6 @@
 import React from 'react';
 import { ThemeMode, EditorCursorInfo } from '../types';
-import { Check, ShieldCheck, Zap, Save, WrapText, Sparkles, Sliders } from 'lucide-react';
+import { Check, ShieldCheck, Zap, Save, WrapText, Sparkles, Sliders, Terminal } from 'lucide-react';
 
 interface StatusBarProps {
   cursorInfo: EditorCursorInfo;
@@ -20,6 +20,9 @@ interface StatusBarProps {
   onOpenCodeHealth?: () => void;
   onOpenCssStudio?: () => void;
   theme: ThemeMode;
+  consoleCount?: { error: number; total: number };
+  isConsoleOpen?: boolean;
+  onToggleConsole?: () => void;
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
@@ -39,7 +42,10 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   healthScore = 100,
   onOpenCodeHealth,
   onOpenCssStudio,
-  theme
+  theme,
+  consoleCount,
+  isConsoleOpen,
+  onToggleConsole
 }) => {
   const getHealthBadgeStyle = (score: number) => {
     if (score >= 90) return 'text-emerald-500 hover:bg-emerald-500/10';
@@ -82,6 +88,34 @@ export const StatusBar: React.FC<StatusBarProps> = ({
             <Sliders className="w-3 h-3" />
             <span>CSS Studio</span>
           </button>
+        )}
+
+        {/* Developer Console Toggle in Status Bar */}
+        {onToggleConsole && (
+          <>
+            <span className="text-neutral-500 hidden sm:inline">|</span>
+            <button
+              onClick={onToggleConsole}
+              title={`Toggle Developer Console (${consoleCount?.total || 0} logs${consoleCount?.error ? `, ${consoleCount.error} errors` : ''})`}
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded font-bold transition-all ${
+                isConsoleOpen
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : (consoleCount?.error || 0) > 0
+                    ? 'bg-red-500/20 text-red-500 hover:bg-red-500/30'
+                    : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-200 hover:bg-neutral-200/60 dark:hover:bg-neutral-800'
+              }`}
+            >
+              <Terminal className="w-3 h-3" />
+              <span>Console</span>
+              {(consoleCount?.error || 0) > 0 ? (
+                <span className="px-1.5 py-0.2 text-[9px] rounded-full bg-red-600 text-white font-bold animate-pulse">
+                  {consoleCount?.error}
+                </span>
+              ) : (consoleCount?.total || 0) > 0 ? (
+                <span className="text-[10px] opacity-75">({consoleCount?.total})</span>
+              ) : null}
+            </button>
+          </>
         )}
 
         <span className="text-neutral-500 hidden md:inline">|</span>

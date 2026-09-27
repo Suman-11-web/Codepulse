@@ -164,7 +164,17 @@ export default function App() {
   const [consoleMessages, setConsoleMessages] = useState<ConsoleMessage[]>([]);
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [preserveLog, setPreserveLog] = useState(false);
+  const [executionCount, setExecutionCount] = useState(0);
+  const seenMsgIdsRef = useRef<Set<string>>(new Set());
   const previewIframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  // Responsive device view check to avoid duplicate mounted iframes
+  const [isMobileView, setIsMobileView] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+  useEffect(() => {
+    const handleResize = () => setIsMobileView(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Cursor & Status bar stats
   const [activeLang, setActiveLang] = useState<EditorLanguage>('html');
@@ -325,11 +335,13 @@ export default function App() {
   const executeCode = useCallback(() => {
     if (!preserveLog) {
       setConsoleMessages([]);
+      seenMsgIdsRef.current.clear();
     }
     const compiled = getCompiledCode();
     setPreviewHtml(compiled.html);
     setPreviewCss(compiled.css);
     setPreviewJs(compiled.js);
+    setExecutionCount(prev => prev + 1); // Forces fresh iframe execution and console output
     addToast('Code executed', 'Preview refreshed with latest changes', 'info');
   }, [getCompiledCode, preserveLog, addToast]);
 
@@ -383,6 +395,7 @@ export default function App() {
       setPreviewHtml(compiled.html);
       setPreviewCss(compiled.css);
       setPreviewJs(compiled.js);
+      setExecutionCount(prev => prev + 1);
 
       const updated: Project = {
         ...currentProject,
@@ -435,6 +448,10 @@ export default function App() {
       } else if (e.key === 'F11') {
         e.preventDefault();
         setIsZenMode(prev => !prev);
+      } else if (isMod && (e.key === '`' || e.key === '~' || e.key === '\\')) {
+        e.preventDefault();
+        setIsConsoleOpen(prev => !prev);
+        setBottomDockTab('console');
       } else if (isMod && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault();
         setIsCommandPaletteOpen(prev => !prev);
@@ -699,25 +716,72 @@ export default function App() {
   };
 
   // Console message handler from Preview
-  const handleConsoleMessage = useCallback((msg: Omit<ConsoleMessage, 'id' | 'timestamp'>) => {
+  const handleConsoleMessage = useCallback((msg: Omit<ConsoleMessage, 'id' | 'timestamp'> & { msgId?: string }) => {
+    // Precise msgId deduplication for dual-channel (direct hook + postMessage)
+    if (msg.msgId) {
+      if (seenMsgIdsRef.current.has(msg.msgId)) {
+        return;
+      }
+      seenMsgIdsRef.current.add(msg.msgId);
+      if (seenMsgIdsRef.current.size > 1000) {
+        const arr = Array.from(seenMsgIdsRef.current);
+        seenMsgIdsRef.current = new Set(arr.slice(-500));
+      }
+    }
+
     const newMsg: ConsoleMessage = {
-      ...msg,
-      id: Date.now().toString() + Math.random().toString(36).substring(2, 6),
+      type: msg.type,
+      content: msg.content,
+      resultType: msg.resultType,
+      tableData: msg.tableData,
+      msgId: msg.msgId,
+      id: msg.msgId || (Date.now().toString() + Math.random().toString(36).substring(2, 6)),
       timestamp: new Date().toLocaleTimeString([], { hour12: false })
     };
-    setConsoleMessages(prev => [...prev.slice(-150), newMsg]);
+    setConsoleMessages(prev => [...prev.slice(-250), newMsg]);
+
+    // Automatically open console when an error occurs so the developer immediately sees it
+    if (msg.type === 'error') {
+      setIsConsoleOpen(true);
+      setBottomDockTab('console');
+    }
   }, []);
 
   const handleClearConsole = useCallback(() => {
     setConsoleMessages([]);
+    seenMsgIdsRef.current.clear();
     addToast('Console cleared', '', 'info');
   }, [addToast]);
+
+  // Synchronous direct bridge for Preview iframe console messages
+  useEffect(() => {
+    (window as any).__CODEPULSE_CONSOLE_HOOK__ = (msg: any) => {
+      if (msg && msg.source === 'codepulse-preview') {
+        if (msg.type === 'clear') {
+          handleClearConsole();
+        } else if (msg.type === 'ELEMENT_INSPECTED') {
+          if (msg.element) handleElementInspected(msg.element, msg.domTree);
+        } else {
+          handleConsoleMessage({
+            msgId: msg.msgId,
+            type: msg.type,
+            content: msg.content,
+            resultType: msg.resultType,
+            tableData: msg.tableData
+          });
+        }
+      }
+    };
+    return () => {
+      delete (window as any).__CODEPULSE_CONSOLE_HOOK__;
+    };
+  }, [handleClearConsole, handleConsoleMessage]);
 
   // Interactive DevTools Console REPL command execution
   const handleExecuteConsoleCommand = useCallback((code: string) => {
     if (!code.trim()) return;
     const inputMsg: ConsoleMessage = {
-      id: 'in-' + Date.now(),
+      id: 'in-' + Date.now() + Math.random().toString(36).substring(2, 5),
       type: 'input',
       content: [code],
       timestamp: new Date().toLocaleTimeString([], { hour12: false })
@@ -727,8 +791,13 @@ export default function App() {
     const iframe = previewIframeRef.current;
     if (iframe && iframe.contentWindow) {
       iframe.contentWindow.postMessage({ type: 'EVAL_JS', code }, '*');
+    } else {
+      handleConsoleMessage({
+        type: 'error',
+        content: ['❌ Preview runtime not ready. Click Run to initialize preview.']
+      });
     }
-  }, []);
+  }, [handleConsoleMessage]);
 
   // Element Inspector Event Handlers
   const handleElementInspected = useCallback((el: InspectedElement, tree: DomTreeNode) => {
@@ -916,6 +985,17 @@ export default function App() {
       shortcut: 'F11',
       icon: <Monitor className="w-4 h-4 text-purple-500" />,
       action: () => setIsZenMode(prev => !prev)
+    },
+    {
+      id: 'cmd-console',
+      title: 'Toggle Developer Console',
+      category: 'View',
+      shortcut: 'Ctrl+`',
+      icon: <Terminal className="w-4 h-4 text-blue-500" />,
+      action: () => {
+        setIsConsoleOpen(prev => !prev);
+        setBottomDockTab('console');
+      }
     },
     {
       id: 'cmd-keyframes',
@@ -1434,6 +1514,28 @@ export default function App() {
 
                   <button
                     onClick={() => {
+                      setIsConsoleOpen(prev => !prev);
+                      setBottomDockTab('console');
+                      setActiveMenu(null);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-neutral-700 dark:text-neutral-200 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white flex items-center justify-between transition-colors"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Terminal className="w-3.5 h-3.5 text-blue-500" />
+                      <span>Developer Console</span>
+                    </span>
+                    {isConsoleOpen ? (
+                      <span className="flex items-center gap-1">
+                        {consoleMessages.length > 0 && <span className="text-[10px] opacity-75">({consoleMessages.length})</span>}
+                        <Check className="w-4 h-4 text-emerald-500" />
+                      </span>
+                    ) : (
+                      <span className="text-[10px] opacity-60">Ctrl+`</span>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => {
                       handleToggleWordWrap();
                       setActiveMenu(null);
                     }}
@@ -1943,7 +2045,7 @@ export default function App() {
               onClearRequest={() => handleClearEditor('js')}
             />
           )}
-          {mobileTab === 'preview' && (
+          {isMobileView && mobileTab === 'preview' && (
             <div className="flex-1 flex flex-col overflow-hidden h-full">
               <div className="flex-1 h-full">
                 <Preview
@@ -1970,6 +2072,7 @@ export default function App() {
                   isFullscreen={isPreviewFullscreen}
                   onToggleFullscreen={() => setIsPreviewFullscreen(!isPreviewFullscreen)}
                   iframeRef={previewIframeRef}
+                  executionCount={executionCount}
                 />
               </div>
               {isConsoleOpen && (
@@ -2278,6 +2381,7 @@ export default function App() {
                   isFullscreen={isPreviewFullscreen}
                   onToggleFullscreen={() => setIsPreviewFullscreen(!isPreviewFullscreen)}
                   iframeRef={previewIframeRef}
+                  executionCount={executionCount}
                 />
               </div>
 
@@ -2386,6 +2490,12 @@ export default function App() {
           onOpenCodeHealth={() => setIsCodeHealthOpen(true)}
           onOpenCssStudio={() => setIsCssStudioOpen(true)}
           theme={theme}
+          consoleCount={{ error: consoleErrorCount, total: consoleMessages.length }}
+          isConsoleOpen={isConsoleOpen}
+          onToggleConsole={() => {
+            setIsConsoleOpen(prev => !prev);
+            setBottomDockTab('console');
+          }}
         />
       )}
 
