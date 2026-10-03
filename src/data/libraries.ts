@@ -9,9 +9,9 @@ export const POPULAR_LIBRARIES: ExternalLibrary[] = [
     description: 'Modern, lightweight UI Framework by Suman M featuring cards, modals, grids and responsive components.',
     cssUrl: SUI_CSS_CDN,
     jsUrl: SUI_JS_CDN,
-    enabled: true,
+    enabled: false,
     version: 'v2.0.0',
-    badge: 'Recommended'
+    badge: 'UI Kit'
   },
   {
     id: 'tailwind',

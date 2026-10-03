@@ -76,7 +76,7 @@ export const Preview: React.FC<PreviewProps> = ({
   const activeIframeRef = externalIframeRef || localIframeRef;
   const [refreshKey, setRefreshKey] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [previewThemeOverride, setPreviewThemeOverride] = useState<'auto' | 'light' | 'dark'>('auto');
+  const [previewThemeOverride, setPreviewThemeOverride] = useState<'light' | 'dark'>('light');
 
   // Trigger preview refresh only when executionCount explicitly changes from manual Run
   const prevExecCountRef = useRef(executionCount);
@@ -87,8 +87,8 @@ export const Preview: React.FC<PreviewProps> = ({
     }
   }, [executionCount]);
 
-  // Compute effective theme for the preview iframe
-  const effectiveTheme: ThemeMode = previewThemeOverride === 'auto' ? theme : previewThemeOverride;
+  // Compute effective theme for the preview iframe (strictly defaults to real browser 'light')
+  const effectiveTheme: ThemeMode = previewThemeOverride;
 
   // Sync inspect mode to iframe
   useEffect(() => {
@@ -151,28 +151,173 @@ export const Preview: React.FC<PreviewProps> = ({
   <title>Live Preview</title>
   ${suiTags}
   ${libTags}
-  <style>
-    :root {
+  <style id="__codepulse_browser_defaults__">
+    /* ==========================================================================
+       Google Chrome / Real Browser Authentic User-Agent Base Styles
+       Guarantees standard native browser rendering for all HTML elements:
+       buttons, text inputs, selects, textareas, checkboxes, radio, file, etc.
+       ========================================================================== */
+    :root, html {
       color-scheme: ${effectiveTheme};
-    }
-    html {
-      color-scheme: ${effectiveTheme};
-      box-sizing: border-box;
       background-color: ${effectiveTheme === 'dark' ? '#090d16' : '#ffffff'};
-    }
-    *, *::before, *::after {
-      box-sizing: inherit;
-    }
-    body {
-      margin: 0;
-      padding: 16px;
+      color: ${effectiveTheme === 'dark' ? '#f1f5f9' : '#000000'};
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
-      background-color: ${effectiveTheme === 'dark' ? '#090d16' : '#ffffff'};
-      color: ${effectiveTheme === 'dark' ? '#f1f5f9' : '#0f172a'};
-      min-height: 100vh;
-      line-height: 1.5;
-      -webkit-font-smoothing: antialiased;
+      -webkit-text-size-adjust: 100%;
     }
+
+    body {
+      margin: 8px;
+      padding: 0;
+      background-color: ${effectiveTheme === 'dark' ? '#090d16' : '#ffffff'};
+      color: ${effectiveTheme === 'dark' ? '#f1f5f9' : '#000000'};
+      font-size: 16px;
+      line-height: 1.5;
+    }
+
+    /* Native Chrome Button Presentation */
+    button,
+    input[type="button"],
+    input[type="submit"],
+    input[type="reset"] {
+      appearance: auto;
+      -webkit-appearance: button;
+      display: inline-block;
+      font: 400 13.3333px Arial, sans-serif;
+      color: ${effectiveTheme === 'dark' ? '#f1f5f9' : '#000000'};
+      background-color: ${effectiveTheme === 'dark' ? '#2a3346' : '#f0f0f0'};
+      border: 1px solid ${effectiveTheme === 'dark' ? '#4b5563' : '#767676'};
+      border-radius: 3px;
+      padding: 3px 8px;
+      box-sizing: border-box;
+      text-align: center;
+      cursor: default;
+      line-height: normal;
+      margin: 0;
+    }
+
+    button:hover,
+    input[type="button"]:hover,
+    input[type="submit"]:hover,
+    input[type="reset"]:hover {
+      background-color: ${effectiveTheme === 'dark' ? '#374151' : '#e5e5e5'};
+      border-color: ${effectiveTheme === 'dark' ? '#6b7280' : '#4f4f4f'};
+    }
+
+    button:active,
+    input[type="button"]:active,
+    input[type="submit"]:active,
+    input[type="reset"]:active {
+      background-color: ${effectiveTheme === 'dark' ? '#1f2937' : '#d4d4d4'};
+      border-color: ${effectiveTheme === 'dark' ? '#9ca3af' : '#333333'};
+    }
+
+    /* Native Chrome Text Inputs (never hidden, never transparent borderless) */
+    input:not([type]),
+    input[type="text"],
+    input[type="password"],
+    input[type="email"],
+    input[type="number"],
+    input[type="search"],
+    input[type="tel"],
+    input[type="url"],
+    input[type="date"],
+    input[type="datetime-local"],
+    input[type="month"],
+    input[type="time"],
+    input[type="week"] {
+      appearance: auto;
+      -webkit-appearance: textfield;
+      display: inline-block;
+      font: 400 13.3333px Arial, sans-serif;
+      color: ${effectiveTheme === 'dark' ? '#f1f5f9' : '#000000'};
+      background-color: ${effectiveTheme === 'dark' ? '#1e293b' : '#ffffff'};
+      border: 1px solid ${effectiveTheme === 'dark' ? '#64748b' : '#767676'};
+      border-radius: 2px;
+      padding: 2px 5px;
+      box-sizing: border-box;
+      line-height: normal;
+      margin: 0;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      outline: 2px solid #005fb8;
+      outline-offset: -1px;
+    }
+
+    /* Native Chrome Select Dropdown (with true dropdown arrow and borders) */
+    select {
+      appearance: auto;
+      -webkit-appearance: menulist;
+      display: inline-block;
+      font: 400 13.3333px Arial, sans-serif;
+      color: ${effectiveTheme === 'dark' ? '#f1f5f9' : '#000000'};
+      background-color: ${effectiveTheme === 'dark' ? '#1e293b' : '#ffffff'};
+      border: 1px solid ${effectiveTheme === 'dark' ? '#64748b' : '#767676'};
+      border-radius: 2px;
+      padding: 2px 4px;
+      box-sizing: border-box;
+      cursor: default;
+      margin: 0;
+    }
+
+    select option {
+      font: 400 13.3333px Arial, sans-serif;
+      color: ${effectiveTheme === 'dark' ? '#f1f5f9' : '#000000'};
+      background-color: ${effectiveTheme === 'dark' ? '#1e293b' : '#ffffff'};
+    }
+
+    /* Native Chrome Textarea */
+    textarea {
+      appearance: auto;
+      -webkit-appearance: textarea;
+      font: 400 13.3333px monospace;
+      color: ${effectiveTheme === 'dark' ? '#f1f5f9' : '#000000'};
+      background-color: ${effectiveTheme === 'dark' ? '#1e293b' : '#ffffff'};
+      border: 1px solid ${effectiveTheme === 'dark' ? '#64748b' : '#767676'};
+      border-radius: 2px;
+      padding: 3px 5px;
+      box-sizing: border-box;
+    }
+
+    /* Native Checkbox and Radio */
+    input[type="checkbox"],
+    input[type="radio"] {
+      appearance: auto;
+      -webkit-appearance: auto;
+      box-sizing: border-box;
+      margin: 3px 3px 3px 4px;
+      cursor: default;
+    }
+
+    /* Native File Input */
+    input[type="file"] {
+      appearance: auto;
+      -webkit-appearance: initial;
+      font: 400 13.3333px Arial, sans-serif;
+      color: ${effectiveTheme === 'dark' ? '#f1f5f9' : '#000000'};
+    }
+
+    /* Native Color and Range Inputs */
+    input[type="color"] {
+      appearance: auto;
+      width: 44px;
+      height: 24px;
+      border: 1px solid ${effectiveTheme === 'dark' ? '#64748b' : '#767676'};
+      border-radius: 2px;
+      padding: 1px 2px;
+      background-color: ${effectiveTheme === 'dark' ? '#1e293b' : '#ffffff'};
+      cursor: pointer;
+    }
+
+    input[type="range"] {
+      appearance: auto;
+      -webkit-appearance: slider-horizontal;
+      cursor: default;
+      margin: 2px;
+    }
+
     /* Inspector Blueprint Highlight Overlay */
     .__codepulse_highlight {
       position: absolute;
@@ -849,7 +994,7 @@ ${internalHeadAssets}
           doc.body.className = effectiveTheme === 'dark' ? 'dark-preview' : 'light-preview';
           if (!css.includes('background') && !css.includes('background-color')) {
             doc.body.style.backgroundColor = effectiveTheme === 'dark' ? '#090d16' : '#ffffff';
-            doc.body.style.color = effectiveTheme === 'dark' ? '#f1f5f9' : '#0f172a';
+            doc.body.style.color = effectiveTheme === 'dark' ? '#f1f5f9' : '#000000';
           }
         }
       }
@@ -891,11 +1036,7 @@ ${internalHeadAssets}
   };
 
   const handleCyclePreviewTheme = () => {
-    setPreviewThemeOverride(prev => {
-      if (prev === 'auto') return 'dark';
-      if (prev === 'dark') return 'light';
-      return 'auto';
-    });
+    setPreviewThemeOverride(prev => (prev === 'light' ? 'dark' : 'light'));
   };
 
   const handleOpenNewWindow = () => {
@@ -1044,14 +1185,12 @@ ${internalHeadAssets}
           {/* Preview Theme Toggle Button */}
           <button
             onClick={handleCyclePreviewTheme}
-            title={`Preview Theme: ${effectiveTheme === 'dark' ? 'Dark' : 'Light'} (${previewThemeOverride === 'auto' ? 'Syncs with Studio' : 'Manual'}) — Click to toggle`}
+            title={`Preview Theme: ${effectiveTheme === 'dark' ? 'Dark Canvas' : 'Browser Light (Default)'} — Click to switch`}
             aria-label="Toggle preview theme"
             className={`px-2 py-1 rounded-md text-xs flex items-center gap-1 font-semibold transition-all ${
-              previewThemeOverride !== 'auto'
-                ? 'bg-blue-600/10 text-blue-600 dark:text-blue-400 border border-blue-500/30'
-                : theme === 'dark'
-                  ? 'text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800'
-                  : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-200/80'
+              previewThemeOverride === 'light'
+                ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                : 'bg-blue-600/10 text-blue-600 dark:text-blue-400 border border-blue-500/30'
             }`}
           >
             {effectiveTheme === 'dark' ? (
@@ -1060,7 +1199,7 @@ ${internalHeadAssets}
               <Sun className="w-3.5 h-3.5 text-amber-500" />
             )}
             <span className="text-[11px] hidden lg:inline capitalize">
-              {previewThemeOverride === 'auto' ? `Theme: Auto` : `Theme: ${effectiveTheme}`}
+              {previewThemeOverride === 'light' ? 'Browser Light' : 'Dark Canvas'}
             </span>
           </button>
 

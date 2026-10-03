@@ -9,7 +9,7 @@ export const SUI_JS_CDN = 'https://cdn.jsdelivr.net/gh/Suman-11-web/SUI-FRAMEWOR
  */
 export function generateStandAloneHtml(
   html: string, 
-  includeSui: boolean = true,
+  includeSui: boolean = false,
   externalLibraries: ExternalLibrary[] = []
 ): string {
   // If html already has <html> or <body>, merge appropriately, otherwise wrap
@@ -205,7 +205,7 @@ export const DEFAULT_SETTINGS: EditorSettings = {
   wordWrap: true,
   autoRun: true,
   autoRunDelay: 500,
-  includeSui: true,
+  includeSui: false,
   theme: 'dark',
   layout: 'split-vertical',
   suggestions: true

@@ -3,54 +3,80 @@ import { StarterTemplate } from '../types';
 export const STARTER_TEMPLATES: StarterTemplate[] = [
   {
     id: 'hello-world',
-    name: 'Hello World (Default)',
-    description: 'Clean default starter project showcasing interactive button and SUI.css compatibility.',
+    name: 'Real Browser Defaults',
+    description: 'Clean native browser playground with authentic button, input, select controls, and live console output.',
     badge: 'Default',
-    includeSui: true,
-    html: `<div class="app">
-    <h1>Hello SUI.css!</h1>
-    <button id="btn">Click Me</button>
+    includeSui: false,
+    html: `<h1>Real Browser Output</h1>
+<p>Standard HTML elements rendered with native browser defaults:</p>
+
+<div style="margin: 16px 0; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+  <button id="btn">Click Me</button>
+  <input type="text" id="myInput" placeholder="Type here..." value="Hello Browser" />
+  <select id="mySelect">
+    <option value="1">Option 1</option>
+    <option value="2">Option 2</option>
+    <option value="3">Option 3</option>
+  </select>
+  <input type="file" id="myFile" />
+</div>
+
+<div style="margin: 16px 0; display: flex; gap: 16px; flex-wrap: wrap; align-items: center;">
+  <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+    <input type="checkbox" id="myCheck" checked />
+    <span>Native Checkbox</span>
+  </label>
+  <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+    <input type="radio" name="demoRadio" checked />
+    <span>Radio 1</span>
+  </label>
+  <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+    <input type="radio" name="demoRadio" />
+    <span>Radio 2</span>
+  </label>
+</div>
+
+<div style="margin: 16px 0;">
+  <textarea rows="3" cols="40" placeholder="Native multi-line textarea...">Native browser textarea</textarea>
 </div>`,
-    css: `.app {
-    text-align: center;
-    padding: 40px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
+    css: `/* Real Browser Playground
+   Default light canvas and native Chrome controls (buttons, text inputs, selects, files).
+   Write your custom CSS rules here: */
 
 h1 {
-    font-size: 2.2rem;
-    margin-bottom: 20px;
-    color: #3b82f6;
+  color: #1e293b;
+  margin-top: 0;
 }
 
-button {
-    padding: 12px 24px;
-    font-size: 1rem;
-    font-weight: 600;
-    color: #ffffff;
-    background-color: #2563eb;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
-    transition: transform 0.15s ease, background-color 0.15s ease;
-}
-
-button:hover {
-    background-color: #1d4ed8;
-    transform: translateY(-2px);
-}
-
-button:active {
-    transform: translateY(0);
+p {
+  color: #475569;
 }`,
     js: `// Interactive button listener & Console verification
-console.log("🚀 SUI CodePulse ready! Click 'Click Me' or edit JavaScript to see live console output.");
+console.log("🚀 Real browser live preview ready! All buttons, inputs, and selects render with authentic Chrome defaults.");
 
-document.getElementById("btn").addEventListener("click", () => {
-    alert("Hello from the Live Code Editor!");
-    console.log("Button clicked successfully at: " + new Date().toLocaleTimeString());
-});`
+const btn = document.getElementById("btn");
+const input = document.getElementById("myInput");
+const select = document.getElementById("mySelect");
+
+if (btn) {
+  btn.addEventListener("click", () => {
+    const val = input ? input.value : "";
+    const sel = select ? select.value : "";
+    console.log("Button clicked! Input value:", val, "| Selected option:", sel);
+  });
+}
+
+if (input) {
+  input.addEventListener("input", (e) => {
+    console.log("Input changed:", e.target.value);
+  });
+}
+
+if (select) {
+  select.addEventListener("change", (e) => {
+    console.log("Select changed to:", e.target.value);
+  });
+}`
   },
   {
     id: 'sui-showcase',
@@ -240,7 +266,7 @@ document.getElementById('warnBtn').addEventListener('click', () => {
     name: 'Modern Glass Calculator',
     description: 'A fully functional interactive calculator with decimal points, operators, and clear display.',
     badge: 'Popular',
-    includeSui: true,
+    includeSui: false,
     html: `<div class="calc-wrapper">
   <div class="calculator">
     <div class="screen" id="display">0</div>
@@ -425,7 +451,7 @@ document.getElementById("equals").addEventListener("click", () => {
     name: 'Developer Portfolio',
     description: 'Clean modern developer portfolio with hero banner, tech stack chips, and contact form.',
     badge: 'Portfolio',
-    includeSui: true,
+    includeSui: false,
     html: `<div class="portfolio-container">
   <header class="navbar">
     <div class="logo">Suman M</div>
@@ -634,7 +660,7 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     name: 'Modern Auth / Login Page',
     description: 'Clean responsive login card with password visibility toggle and form validation.',
     badge: 'Auth',
-    includeSui: true,
+    includeSui: false,
     html: `<div class="login-wrapper">
   <div class="card">
     <div class="header">
@@ -812,7 +838,7 @@ form.addEventListener("submit", (e) => {
     name: 'Responsive Navbar',
     description: 'Sticky navigation bar with mobile hamburger menu toggle and animated drawer.',
     badge: 'Navigation',
-    includeSui: true,
+    includeSui: false,
     html: `<header class="site-header">
   <div class="nav-container">
     <div class="brand">
@@ -979,7 +1005,7 @@ document.getElementById("getStartedBtn").addEventListener("click", () => {
     name: 'Blank Canvas',
     description: 'Empty project to start creating from scratch.',
     badge: 'Empty',
-    includeSui: true,
+    includeSui: false,
     html: `<!DOCTYPE html>
 <html lang="en">
 <head>

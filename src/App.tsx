@@ -116,23 +116,28 @@ export default function App() {
         html: shared.html || '',
         css: shared.css || '',
         js: shared.js || '',
-        includeSui: shared.includeSui !== false,
+        includeSui: shared.includeSui === true,
         createdAt: Date.now(),
         updatedAt: Date.now()
       };
     }
 
     const saved = loadCurrentProject();
-    if (saved) return saved;
+    if (saved) {
+      return {
+        ...saved,
+        includeSui: saved.id === 'sui-showcase' ? Boolean(saved.includeSui) : false
+      };
+    }
 
     const defaultTmpl = STARTER_TEMPLATES[0];
     return {
       id: 'default-project',
-      name: 'Hello SUI.css Demo',
+      name: 'Real Browser Playground',
       html: defaultTmpl.html,
       css: defaultTmpl.css,
       js: defaultTmpl.js,
-      includeSui: true,
+      includeSui: false,
       createdAt: Date.now(),
       updatedAt: Date.now()
     };
@@ -231,11 +236,11 @@ export default function App() {
   const [bottomDockTab, setBottomDockTab] = useState<'console' | 'elements'>('console');
   const [deviceOrientation, setDeviceOrientation] = useState<'portrait' | 'landscape'>('portrait');
 
-  // Active External Libraries (CDN Packages)
+  // Active External Libraries (CDN Packages) - Real browser defaults (clean, disabled by default)
   const [activeLibraries, setActiveLibraries] = useState<ExternalLibrary[]>(() => {
     return POPULAR_LIBRARIES.map(lib => ({
       ...lib,
-      enabled: lib.id === 'sui' ? (currentProject.includeSui !== false) : false
+      enabled: lib.id === 'sui' ? Boolean(currentProject.includeSui) : false
     }));
   });
 
@@ -246,6 +251,9 @@ export default function App() {
       }
       return l;
     }));
+    if (lib.id === 'sui') {
+      setCurrentProject(p => ({ ...p, includeSui: !lib.enabled }));
+    }
     addToast(`${lib.name} ${!lib.enabled ? 'Enabled' : 'Disabled'}`, `Live preview and exports updated`, 'info');
   };
 
@@ -622,7 +630,7 @@ export default function App() {
       html: tmpl.html,
       css: tmpl.css,
       js: tmpl.js,
-      includeSui: tmpl.includeSui !== false,
+      includeSui: Boolean(tmpl.includeSui),
       createdAt: Date.now(),
       updatedAt: Date.now()
     });
@@ -917,7 +925,7 @@ export default function App() {
 
   // Generate complete HTML bundle for Multi-Device Matrix
   const generateMatrixSrcDoc = useCallback(() => {
-    const suiTags = currentProject.includeSui !== false
+    const suiTags = currentProject.includeSui
       ? `<link rel="stylesheet" href="${SUI_CSS_CDN}">\n  <script src="${SUI_JS_CDN}"></script>`
       : '';
     const libTags = activeLibraries
