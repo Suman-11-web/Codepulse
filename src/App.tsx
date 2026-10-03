@@ -381,40 +381,45 @@ export default function App() {
     addToast('Inserted into HTML ✨', `Added "${name}" to your code`, 'success');
   }, [addToast]);
 
-  // Auto Run effect
+  // Auto Run effect: debounced compilation when code or dialect changes
   useEffect(() => {
     if (!settings.autoRun) return;
 
-    setAutoSaveStatus('saving');
     if (autoRunTimerRef.current) {
       clearTimeout(autoRunTimerRef.current);
     }
 
     autoRunTimerRef.current = setTimeout(() => {
       const compiled = getCompiledCode();
-      setPreviewHtml(compiled.html);
-      setPreviewCss(compiled.css);
-      setPreviewJs(compiled.js);
-      setExecutionCount(prev => prev + 1);
+      setPreviewHtml(prev => (prev !== compiled.html ? compiled.html : prev));
+      setPreviewCss(prev => (prev !== compiled.css ? compiled.css : prev));
+      setPreviewJs(prev => (prev !== compiled.js ? compiled.js : prev));
 
-      const updated: Project = {
-        ...currentProject,
-        html: htmlCode,
-        css: cssCode,
-        js: jsCode,
-        updatedAt: Date.now()
-      };
-      setCurrentProject(updated);
-      saveCurrentProjectToStorage(updated);
+      // Persist code changes without triggering re-render dependency loop
+      setCurrentProject(prev => {
+        if (prev.html === htmlCode && prev.css === cssCode && prev.js === jsCode) {
+          return prev;
+        }
+        const updated: Project = {
+          ...prev,
+          html: htmlCode,
+          css: cssCode,
+          js: jsCode,
+          updatedAt: Date.now()
+        };
+        saveCurrentProjectToStorage(updated);
+        return updated;
+      });
+
       setAutoSaveStatus('saved');
-    }, settings.autoRunDelay);
+    }, Math.max(400, settings.autoRunDelay || 600));
 
     return () => {
       if (autoRunTimerRef.current) {
         clearTimeout(autoRunTimerRef.current);
       }
     };
-  }, [getCompiledCode, htmlCode, cssCode, jsCode, currentProject, settings.autoRun, settings.autoRunDelay]);
+  }, [getCompiledCode, htmlCode, cssCode, jsCode, settings.autoRun, settings.autoRunDelay]);
 
   // Auto Save when autoRun is off
   useEffect(() => {
@@ -422,15 +427,20 @@ export default function App() {
 
     setAutoSaveStatus('saving');
     const timer = setTimeout(() => {
-      const updated: Project = {
-        ...currentProject,
-        html: htmlCode,
-        css: cssCode,
-        js: jsCode,
-        updatedAt: Date.now()
-      };
-      setCurrentProject(updated);
-      saveCurrentProjectToStorage(updated);
+      setCurrentProject(prev => {
+        if (prev.html === htmlCode && prev.css === cssCode && prev.js === jsCode) {
+          return prev;
+        }
+        const updated: Project = {
+          ...prev,
+          html: htmlCode,
+          css: cssCode,
+          js: jsCode,
+          updatedAt: Date.now()
+        };
+        saveCurrentProjectToStorage(updated);
+        return updated;
+      });
       setAutoSaveStatus('saved');
     }, 1000);
 
@@ -716,7 +726,7 @@ export default function App() {
   };
 
   // Console message handler from Preview
-  const handleConsoleMessage = useCallback((msg: Omit<ConsoleMessage, 'id' | 'timestamp'> & { msgId?: string }) => {
+  const handleConsoleMessage = useCallback((msg: Omit<ConsoleMessage, 'id' | 'timestamp'> & { msgId?: string; rawData?: any }) => {
     // Precise msgId deduplication for dual-channel (direct hook + postMessage)
     if (msg.msgId) {
       if (seenMsgIdsRef.current.has(msg.msgId)) {
@@ -734,6 +744,7 @@ export default function App() {
       content: msg.content,
       resultType: msg.resultType,
       tableData: msg.tableData,
+      rawData: msg.rawData,
       msgId: msg.msgId,
       id: msg.msgId || (Date.now().toString() + Math.random().toString(36).substring(2, 6)),
       timestamp: new Date().toLocaleTimeString([], { hour12: false })
@@ -753,6 +764,14 @@ export default function App() {
     addToast('Console cleared', '', 'info');
   }, [addToast]);
 
+  // Element Inspector Event Handlers
+  const handleElementInspected = useCallback((el: InspectedElement, tree: DomTreeNode) => {
+    setInspectedElement(el);
+    if (tree) setDomTree(tree);
+    setBottomDockTab('elements');
+    setIsConsoleOpen(true);
+  }, []);
+
   // Synchronous direct bridge for Preview iframe console messages
   useEffect(() => {
     (window as any).__CODEPULSE_CONSOLE_HOOK__ = (msg: any) => {
@@ -767,7 +786,8 @@ export default function App() {
             type: msg.type,
             content: msg.content,
             resultType: msg.resultType,
-            tableData: msg.tableData
+            tableData: msg.tableData,
+            rawData: msg.rawData
           });
         }
       }
@@ -775,7 +795,7 @@ export default function App() {
     return () => {
       delete (window as any).__CODEPULSE_CONSOLE_HOOK__;
     };
-  }, [handleClearConsole, handleConsoleMessage]);
+  }, [handleClearConsole, handleConsoleMessage, handleElementInspected]);
 
   // Interactive DevTools Console REPL command execution
   const handleExecuteConsoleCommand = useCallback((code: string) => {
@@ -798,14 +818,6 @@ export default function App() {
       });
     }
   }, [handleConsoleMessage]);
-
-  // Element Inspector Event Handlers
-  const handleElementInspected = useCallback((el: InspectedElement, tree: DomTreeNode) => {
-    setInspectedElement(el);
-    if (tree) setDomTree(tree);
-    setBottomDockTab('elements');
-    setIsConsoleOpen(true);
-  }, []);
 
   const handleToggleInspect = useCallback(() => {
     setIsInspectActive(prev => {
@@ -2157,7 +2169,8 @@ export default function App() {
         </div>
 
         {/* DESKTOP VIEW (Desktop 3 Editors + Live Preview with Draggable Dividers) */}
-        <div className="hidden md:flex flex-1 flex-col h-full overflow-hidden">
+        {!isMobileView && (
+          <div className="hidden md:flex flex-1 flex-col h-full overflow-hidden">
           {/* Top Bar for Desktop Editor: Tab switcher or Split indicator */}
           <div className={`flex items-center justify-between px-3 py-1.5 border-b shrink-0 ${
             theme === 'dark' ? 'bg-[#090d16] border-neutral-800' : 'bg-neutral-100 border-neutral-200'
@@ -2466,6 +2479,7 @@ export default function App() {
             </div>
           )}
         </div>
+      )}
       </main>
 
       {/* ========================================================

@@ -27,6 +27,7 @@ export interface ConsoleMessage {
   resultType?: string;
   count?: number;
   tableData?: any;
+  rawData?: any;
   msgId?: string;
 }
 

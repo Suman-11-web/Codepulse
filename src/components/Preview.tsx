@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { DeviceMode, ConsoleMessage, ThemeMode, ExternalLibrary, InspectedElement, DomTreeNode } from '../types';
 import { SUI_CSS_CDN, SUI_JS_CDN } from '../utils/fileUtils';
 import { 
@@ -78,6 +78,15 @@ export const Preview: React.FC<PreviewProps> = ({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [previewThemeOverride, setPreviewThemeOverride] = useState<'auto' | 'light' | 'dark'>('auto');
 
+  // Trigger preview refresh only when executionCount explicitly changes from manual Run
+  const prevExecCountRef = useRef(executionCount);
+  useEffect(() => {
+    if (executionCount > 0 && executionCount !== prevExecCountRef.current) {
+      prevExecCountRef.current = executionCount;
+      setRefreshKey(prev => prev + 1);
+    }
+  }, [executionCount]);
+
   // Compute effective theme for the preview iframe
   const effectiveTheme: ThemeMode = previewThemeOverride === 'auto' ? theme : previewThemeOverride;
 
@@ -92,7 +101,25 @@ export const Preview: React.FC<PreviewProps> = ({
     }
   }, [isInspectActive, activeIframeRef]);
 
-  // Re-generate iframe bundle with safe runner, theme synchronization, and DOM Inspector
+  // In-place dynamic CSS update to avoid iframe reloads during CSS edits
+  const lastInjectedCssRef = useRef<string>(css);
+  useEffect(() => {
+    if (lastInjectedCssRef.current === css) return;
+    lastInjectedCssRef.current = css;
+    try {
+      const iframe = activeIframeRef.current;
+      if (iframe && iframe.contentDocument) {
+        const doc = iframe.contentDocument;
+        const styleTag = doc.getElementById('__codepulse_live_styles__');
+        if (styleTag) {
+          styleTag.textContent = css;
+          return;
+        }
+      }
+    } catch (e) {}
+  }, [css, activeIframeRef]);
+
+  // Re-generate iframe bundle with safe real JS engine, console interception, and DOM Inspector
   const generatePreviewSrcDoc = () => {
     const suiTags = includeSui
       ? `<link rel="stylesheet" href="${SUI_CSS_CDN}">\n  <script src="${SUI_JS_CDN}"></script>`
@@ -110,14 +137,12 @@ export const Preview: React.FC<PreviewProps> = ({
       .filter(Boolean)
       .join('\n  ');
 
-    const safeUserJs = js ? js.replace(/<\/script/gi, '<\\/script') : '';
-    const userScriptTag = safeUserJs.trim()
-      ? `\n  <script id="__codepulse_user_code__">\n${safeUserJs}\n  <\/script>`
-      : '';
-
     const hasDocType = /<!DOCTYPE/i.test(html);
     const hasHtmlTag = /<html/i.test(html);
     const hasHeadTag = /<head/i.test(html);
+
+    // Safely encode user code into a JSON string literal to prevent script tag or token breakage
+    const userJsJson = JSON.stringify(js || '').replace(/<\/script/gi, '<\\/script');
 
     const internalHeadAssets = `
   <meta charset="UTF-8">
@@ -133,6 +158,7 @@ export const Preview: React.FC<PreviewProps> = ({
     html {
       color-scheme: ${effectiveTheme};
       box-sizing: border-box;
+      background-color: ${effectiveTheme === 'dark' ? '#090d16' : '#ffffff'};
     }
     *, *::before, *::after {
       box-sizing: inherit;
@@ -146,7 +172,6 @@ export const Preview: React.FC<PreviewProps> = ({
       min-height: 100vh;
       line-height: 1.5;
       -webkit-font-smoothing: antialiased;
-      transition: background-color 0.2s ease, color 0.2s ease;
     }
     /* Inspector Blueprint Highlight Overlay */
     .__codepulse_highlight {
@@ -173,43 +198,42 @@ export const Preview: React.FC<PreviewProps> = ({
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
       white-space: nowrap;
     }
-    /* User CSS */
-    ${css}
   </style>
-  <script>
+  <style id="__codepulse_live_styles__">
+${css}
+  </style>
+  <script id="__codepulse_engine__">
     (function() {
       const counts = {};
       const timers = {};
 
-      function safeStringify(obj, maxDepth = 3) {
-        const seen = new WeakSet();
+      function safeStringify(obj, maxDepth) {
+        if (maxDepth === undefined) maxDepth = 3;
+        var seen = [];
 
         function serialize(val, depth) {
           if (val === null) return 'null';
           if (val === undefined) return 'undefined';
           if (typeof val === 'number') return isNaN(val) ? 'NaN' : String(val);
           if (typeof val === 'boolean') return String(val);
-          if (typeof val === 'string') return val;
+          if (typeof val === 'string') return depth > 0 ? JSON.stringify(val) : val;
           if (typeof val === 'symbol') return val.toString();
+          if (typeof val === 'bigint') return val.toString() + 'n';
           if (typeof val === 'function') {
-            const name = val.name ? ' ' + val.name : '';
+            var name = val.name ? ' ' + val.name : '';
             return 'ƒ' + name + '()';
           }
-
           if (val instanceof Error) {
-            return val.name + ': ' + val.message + (val.stack ? '\n' + val.stack : '');
+            return (val.stack || (val.name + ': ' + val.message));
           }
-
           if (val instanceof Date) {
-            return val.toISOString();
+            return depth > 0 ? JSON.stringify(val.toISOString()) : val.toISOString();
           }
-
           if (val instanceof RegExp) {
-            return val.toString();
+            return depth > 0 ? JSON.stringify(val.toString()) : val.toString();
           }
-
           if (typeof Element !== 'undefined' && val instanceof Element) {
-            let desc = '<' + val.tagName.toLowerCase();
+            var desc = '<' + val.tagName.toLowerCase();
             if (val.id) desc += '#' + val.id;
             if (val.className && typeof val.className === 'string') {
               desc += '.' + val.className.trim().split(/\\s+/).join('.');
@@ -219,30 +243,32 @@ export const Preview: React.FC<PreviewProps> = ({
           }
 
           if (typeof val === 'object') {
-            if (seen.has(val)) return '[Circular]';
-            seen.add(val);
+            if (seen.indexOf(val) !== -1) return '"[Circular]"';
+            seen.push(val);
 
             if (depth >= maxDepth) {
-              return Array.isArray(val) ? '[...Array(' + val.length + ')]' : '{...Object}';
+              return Array.isArray(val) ? '"[...Array(' + val.length + ')]"' : '"{...Object}"';
             }
 
             if (Array.isArray(val)) {
               try {
-                return '[' + val.map(item => serialize(item, depth + 1)).join(', ') + ']';
+                return '[' + val.map(function(item) {
+                  return serialize(item, depth + 1);
+                }).join(', ') + ']';
               } catch(e) {
                 return '[Array]';
               }
             }
 
             try {
-              const keys = Object.keys(val);
-              const props = keys.slice(0, 100).map(k => {
-                let vStr;
+              var keys = Object.keys(val);
+              var props = keys.slice(0, 100).map(function(k) {
+                var vStr;
                 try { vStr = serialize(val[k], depth + 1); }
-                catch(e) { vStr = '[Unreadable]'; }
+                catch(e) { vStr = '"[Unreadable]"'; }
                 return JSON.stringify(k) + ': ' + vStr;
               });
-              if (keys.length > 100) props.push('... ' + (keys.length - 100) + ' more');
+              if (keys.length > 100) props.push('"... ' + (keys.length - 100) + ' more"');
               return '{ ' + props.join(', ') + ' }';
             } catch(e) {
               return Object.prototype.toString.call(val);
@@ -257,12 +283,19 @@ export const Preview: React.FC<PreviewProps> = ({
 
       var msgSequence = 0;
 
-      function sendToParent(type, args, resultType, tableData) {
+      function sendToParent(type, args, resultType, tableData, rawData) {
         try {
-          var serializable = Array.from(args).map(function(arg) {
+          var serializable = Array.from(args || []).map(function(arg) {
             if (typeof arg === 'string') return arg;
             return safeStringify(arg);
           });
+
+          // Extract single object/array for interactive inspector
+          if (rawData === undefined && args && args.length === 1 && typeof args[0] === 'object' && args[0] !== null) {
+            try {
+              rawData = JSON.parse(JSON.stringify(args[0]));
+            } catch(e) {}
+          }
 
           var msgId = 'cp_' + Date.now() + '_' + (++msgSequence) + '_' + Math.random().toString(36).substring(2, 7);
 
@@ -272,7 +305,8 @@ export const Preview: React.FC<PreviewProps> = ({
             type: type,
             content: serializable,
             resultType: resultType,
-            tableData: tableData
+            tableData: tableData,
+            rawData: rawData
           };
 
           // 1. Direct parent hook (instant & synchronous)
@@ -288,15 +322,11 @@ export const Preview: React.FC<PreviewProps> = ({
               window.parent.postMessage(payload, '*');
             }
           } catch(e2) {}
-
-          // 3. postMessage to self (in case popup or standalone)
-          try {
-            if (window.postMessage) {
-              window.postMessage(payload, '*');
-            }
-          } catch(e3) {}
         } catch(e) {}
       }
+
+      // Expose globally inside preview
+      window.__codepulse_send = sendToParent;
 
       const origLog = console.log;
       const origWarn = console.warn;
@@ -328,21 +358,25 @@ export const Preview: React.FC<PreviewProps> = ({
         if (origClear) { try { origClear.apply(console); } catch(e) {} }
       };
 
-      console.count = function(label = 'default') {
+      console.count = function(label) {
+        label = label === undefined ? 'default' : String(label);
         counts[label] = (counts[label] || 0) + 1;
         sendToParent('info', [label + ': ' + counts[label]]);
       };
 
-      console.countReset = function(label = 'default') {
+      console.countReset = function(label) {
+        label = label === undefined ? 'default' : String(label);
         counts[label] = 0;
       };
 
-      console.time = function(label = 'default') {
+      console.time = function(label) {
+        label = label === undefined ? 'default' : String(label);
         timers[label] = performance.now();
       };
 
-      console.timeEnd = function(label = 'default') {
-        if (timers[label]) {
+      console.timeEnd = function(label) {
+        label = label === undefined ? 'default' : String(label);
+        if (timers[label] !== undefined) {
           const elapsed = performance.now() - timers[label];
           delete timers[label];
           sendToParent('info', [label + ': ' + elapsed.toFixed(2) + ' ms']);
@@ -351,9 +385,18 @@ export const Preview: React.FC<PreviewProps> = ({
         }
       };
 
-      console.assert = function(condition, ...args) {
+      console.timeLog = function(label) {
+        label = label === undefined ? 'default' : String(label);
+        if (timers[label] !== undefined) {
+          const elapsed = performance.now() - timers[label];
+          sendToParent('info', [label + ': ' + elapsed.toFixed(2) + ' ms']);
+        }
+      };
+
+      console.assert = function(condition) {
         if (!condition) {
-          const msg = args.length > 0 ? args.map(safeStringify).join(' ') : 'console.assert failed';
+          var args = Array.prototype.slice.call(arguments, 1);
+          var msg = args.length > 0 ? args.map(safeStringify).join(' ') : 'console.assert failed';
           sendToParent('error', ['Assertion failed: ' + msg]);
         }
       };
@@ -377,12 +420,20 @@ export const Preview: React.FC<PreviewProps> = ({
         } catch(e) {}
 
         const serialized = safeStringify(data);
-        sendToParent('table', [serialized], 'object', tableFormatted);
+        sendToParent('table', [serialized], 'object', tableFormatted, data);
       };
 
       console.dir = function(data) {
-        sendToParent('log', [safeStringify(data, 5)]);
+        sendToParent('log', [safeStringify(data, 5)], undefined, undefined, data);
       };
+
+      console.group = function(label) {
+        sendToParent('info', ['▼ ' + (label || 'console.group')]);
+      };
+      console.groupCollapsed = function(label) {
+        sendToParent('info', ['▶ ' + (label || 'console.group')]);
+      };
+      console.groupEnd = function() {};
 
       function showInPreviewAlert(msg) {
         try {
@@ -440,6 +491,7 @@ export const Preview: React.FC<PreviewProps> = ({
         return defaultVal || null;
       };
 
+      // Comprehensive error interception
       window.onerror = function(message, source, lineno, colno, error) {
         var lineInfo = '';
         if (lineno) lineInfo = ' (Line ' + lineno + (colno ? ':' + colno : '') + ')';
@@ -452,13 +504,21 @@ export const Preview: React.FC<PreviewProps> = ({
           errMsg = String(message || 'Unknown error');
         }
         sendToParent('error', ['❌ ' + errMsg + lineInfo]);
-        return false;
+        return true; // Suppress uncaught browser errors in Chrome host console
       };
 
-      window.onunhandledrejection = function(event) {
+      window.addEventListener('unhandledrejection', function(event) {
         var reason = event.reason ? ((event.reason && event.reason.stack) || event.reason.message || String(event.reason)) : 'Unknown';
         sendToParent('error', ['❌ Unhandled Promise: ' + reason]);
-      };
+      });
+
+      window.addEventListener('error', function(event) {
+        if (event && event.error) {
+          var errMsg = event.error.stack || event.error.message || String(event.error);
+          var lineInfo = event.lineno ? (' (Line ' + event.lineno + (event.colno ? ':' + event.colno : '') + ')') : '';
+          sendToParent('error', ['❌ ' + errMsg + lineInfo]);
+        }
+      }, true);
 
       // -------------------------------------------------------------
       // INTERACTIVE DOM INSPECTOR ENGINE INSIDE IFRAME
@@ -485,7 +545,8 @@ export const Preview: React.FC<PreviewProps> = ({
         if (highlightBadge) highlightBadge.style.display = 'none';
       }
 
-      function serializeDomTree(element, idPrefix = 'node') {
+      function serializeDomTree(element, idPrefix) {
+        if (!idPrefix) idPrefix = 'node';
         if (!element || element.nodeType !== 1) return null;
         if (element.classList && element.classList.contains('__codepulse_highlight')) return null;
         if (element.classList && element.classList.contains('__codepulse_badge')) return null;
@@ -664,13 +725,20 @@ export const Preview: React.FC<PreviewProps> = ({
             if (!window.$) window.$ = document.querySelector.bind(document);
             if (!window.$$) window.$$ = function(s) { return Array.from(document.querySelectorAll(s)); };
             if (!window.clear) window.clear = function() { console.clear(); };
+            if (!window.dir) window.dir = function(x) { console.dir(x); };
+            if (!window.table) window.table = function(x) { console.table(x); };
 
             const rawCode = ev.data.code;
             const res = (0, eval)(rawCode);
             const rType = typeof res;
             const displayStr = safeStringify(res, 4);
 
-            sendToParent('result', [displayStr], rType);
+            var rawData = undefined;
+            if (typeof res === 'object' && res !== null) {
+              try { rawData = JSON.parse(JSON.stringify(res)); } catch(e) {}
+            }
+
+            sendToParent('result', [displayStr], rType, undefined, rawData);
           } catch(evalErr) {
             var errStr = (evalErr && evalErr.stack) ? evalErr.stack : (evalErr && evalErr.message) ? (evalErr.name + ': ' + evalErr.message) : String(evalErr);
             sendToParent('error', ['❌ ' + errStr]);
@@ -680,21 +748,69 @@ export const Preview: React.FC<PreviewProps> = ({
     })();
   </script>`;
 
+    // Runner script placed right before </body> to run after DOM is constructed
+    const userRunnerScript = `
+  <script id="__codepulse_user_runner__">
+    (function() {
+      var rawUserJs = ${userJsJson};
+      if (!rawUserJs || !rawUserJs.trim()) return;
+
+      function executeUserEngine() {
+        // 1. Pre-flight Syntax Check: Catches SyntaxError (invalid tokens, unexpected tokens, etc.)
+        try {
+          new Function(rawUserJs);
+        } catch (syntaxErr) {
+          var lineInfo = '';
+          if (syntaxErr && syntaxErr.lineNumber) {
+            lineInfo = ' (Line ' + syntaxErr.lineNumber + ')';
+          }
+          if (typeof window.__codepulse_send === 'function') {
+            window.__codepulse_send('error', ['❌ ' + (syntaxErr.name || 'SyntaxError') + ': ' + (syntaxErr.message || 'Invalid or unexpected token') + lineInfo]);
+          }
+          return;
+        }
+
+        // 2. Global Execution Engine: Executes code in global scope with top-level window exposure
+        try {
+          (0, eval)(rawUserJs);
+        } catch (runtimeErr) {
+          var errMsg = '';
+          if (runtimeErr && runtimeErr.stack) {
+            errMsg = runtimeErr.stack;
+          } else if (runtimeErr && runtimeErr.message) {
+            errMsg = (runtimeErr.name ? (runtimeErr.name + ': ') : '') + runtimeErr.message;
+          } else {
+            errMsg = String(runtimeErr || 'Runtime error');
+          }
+          if (typeof window.__codepulse_send === 'function') {
+            window.__codepulse_send('error', ['❌ ' + errMsg]);
+          }
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', executeUserEngine);
+      } else {
+        executeUserEngine();
+      }
+    })();
+  </script>`;
+
     if (hasDocType || hasHtmlTag) {
       let result = html;
       if (hasHeadTag) {
-        result = result.replace(/<head[^>]*>/i, `$&${internalHeadAssets}`);
+        result = result.replace(/<head[^>]*>/i, (m) => m + '\n' + internalHeadAssets);
       } else if (hasHtmlTag) {
-        result = result.replace(/<html[^>]*>/i, `$&<head>${internalHeadAssets}</head>`);
+        result = result.replace(/<html[^>]*>/i, (m) => m + '<head>' + internalHeadAssets + '</head>');
       } else {
-        result = `<head>${internalHeadAssets}</head>${result}`;
+        result = '<head>' + internalHeadAssets + '</head>' + result;
       }
 
-      if (userScriptTag) {
+      if (userRunnerScript) {
         if (/<\/body>/i.test(result)) {
-          result = result.replace(/<\/body>/i, `${userScriptTag}\n</body>`);
+          result = result.replace(/<\/body>/i, (m) => userRunnerScript + '\n' + m);
         } else {
-          result = `${result}${userScriptTag}`;
+          result = result + userRunnerScript;
         }
       }
       return result;
@@ -707,10 +823,16 @@ ${internalHeadAssets}
 </head>
 <body class="${effectiveTheme === 'dark' ? 'dark-preview' : 'light-preview'}">
   ${html}
-  ${userScriptTag}
+  ${userRunnerScript}
 </body>
 </html>`;
   };
+
+  // Memoize previewSrcDoc so unnecessary parent re-renders do not reload the iframe
+  const previewSrcDoc = useMemo(() => {
+    lastInjectedCssRef.current = css;
+    return generatePreviewSrcDoc();
+  }, [html, js, effectiveTheme, includeSui, externalLibraries, refreshKey]);
 
   // Dynamically update iframe document classes on theme change
   useEffect(() => {
@@ -1039,17 +1161,17 @@ ${internalHeadAssets}
           )}
 
           <iframe
-            key={`preview-${refreshKey}-${executionCount || 0}-${effectiveTheme}-${includeSui}`}
+            key={`preview-${refreshKey}-${effectiveTheme}-${includeSui}`}
             ref={(node) => {
               if (externalIframeRef) {
                 (externalIframeRef as React.MutableRefObject<HTMLIFrameElement | null>).current = node;
               }
               localIframeRef.current = node;
             }}
-            srcDoc={generatePreviewSrcDoc()}
+            srcDoc={previewSrcDoc}
             title="SUI CodePulse Live Preview"
             sandbox="allow-scripts allow-modals allow-forms allow-same-origin"
-            className={`w-full flex-1 border-0 ${effectiveTheme === 'dark' ? 'bg-[#090d16]' : 'bg-white'}`}
+            className={`w-full flex-1 border-0 transition-opacity duration-150 ${effectiveTheme === 'dark' ? 'bg-[#090d16]' : 'bg-white'}`}
           />
         </div>
       </div>

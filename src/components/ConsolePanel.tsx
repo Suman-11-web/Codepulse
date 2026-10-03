@@ -299,9 +299,13 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
   /**
    * Smart renderer: inspects JSON objects, HTML elements, primitive types
    */
-  const renderMessageContent = (content: string, resultType?: string, tableData?: any) => {
+  const renderMessageContent = (content: string, resultType?: string, tableData?: any, rawData?: any) => {
     if (tableData && Array.isArray(tableData)) {
       return <ConsoleTableView tableData={tableData} theme={theme} />;
+    }
+
+    if (rawData && typeof rawData === 'object') {
+      return <ObjectInspector data={rawData} theme={theme} />;
     }
 
     // Try parsing as JSON object or array
@@ -332,7 +336,7 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
       return <span className="text-pink-600 dark:text-pink-400 font-mono font-bold">{content}</span>;
     }
 
-    return <span className="font-mono break-all">{content}</span>;
+    return <span className="font-mono whitespace-pre-wrap break-all">{content}</span>;
   };
 
   return (
@@ -532,8 +536,8 @@ export const ConsolePanel: React.FC<ConsolePanelProps> = ({
                   {/* Message content */}
                   <div className="flex-1 min-w-0">
                     {msg.content.map((item, i) => (
-                      <div key={i} className="inline-block mr-2">
-                        {renderMessageContent(String(item), msg.resultType, msg.tableData)}
+                      <div key={i} className="inline-block mr-2 align-top max-w-full">
+                        {renderMessageContent(String(item), msg.resultType, msg.tableData, msg.rawData)}
                       </div>
                     ))}
                   </div>
