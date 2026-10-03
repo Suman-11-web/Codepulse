@@ -53,6 +53,7 @@ import { PaletteContrastModal } from './components/PaletteContrastModal';
 import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { CodeCardModal } from './components/CodeCardModal';
 import { ResponsiveMatrixModal } from './components/ResponsiveMatrixModal';
+import { CodeReferenceModal } from './components/CodeReferenceModal';
 import { transpileTypeScript, transpileScss } from './utils/languageTranspiler';
 import { CssDialect, JsDialect, EditorLayoutMode, CodeCheckpoint } from './types';
 import { SUI_CSS_CDN, SUI_JS_CDN } from './utils/fileUtils';
@@ -98,7 +99,8 @@ import {
   Palette,
   Monitor,
   LayoutGrid,
-  Image as ImageIcon
+  Image as ImageIcon,
+  BookOpen
 } from 'lucide-react';
 
 export default function App() {
@@ -213,6 +215,7 @@ export default function App() {
   const [isLibrariesModalOpen, setIsLibrariesModalOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isAssetModalOpen, setIsAssetModalOpen] = useState(false);
+  const [isCodeReferenceOpen, setIsCodeReferenceOpen] = useState(false);
   const [isCssStudioOpen, setIsCssStudioOpen] = useState(false);
   const [isMobileQrOpen, setIsMobileQrOpen] = useState(false);
   const [isCodeHealthOpen, setIsCodeHealthOpen] = useState(false);
@@ -1102,6 +1105,14 @@ export default function App() {
       action: () => setIsAssetModalOpen(true)
     },
     {
+      id: 'cmd-code-reference',
+      title: 'HTML & CSS Code Reference Catalog (Tags, Attributes & Properties)',
+      category: 'Reference',
+      shortcut: 'Alt+R',
+      icon: <BookOpen className="w-4 h-4 text-blue-500" />,
+      action: () => setIsCodeReferenceOpen(true)
+    },
+    {
       id: 'cmd-libraries',
       title: 'Manage External Libraries & CDNs',
       category: 'Tools',
@@ -1727,6 +1738,19 @@ export default function App() {
             <span className="hidden sm:inline">Libraries</span>
             <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold border border-blue-500/20">
               {activeLibraries.filter(l => l.enabled).length}
+            </span>
+          </button>
+
+          {/* HTML & CSS REFERENCE BUTTON */}
+          <button
+            onClick={() => setIsCodeReferenceOpen(true)}
+            title="HTML & CSS Reference Catalog (110 tags, 69 attributes, 246 CSS properties & selectors)"
+            className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg text-xs font-semibold border border-neutral-300 dark:border-neutral-700/80 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors shrink-0"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+            <span className="hidden sm:inline">Reference</span>
+            <span className="hidden lg:inline px-1 py-0.2 text-[9px] rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold">
+              HTML/CSS
             </span>
           </button>
         </div>
@@ -2617,6 +2641,22 @@ export default function App() {
         onClose={() => setIsAssetModalOpen(false)}
         onInsert={handleInsertSnippet}
         theme={theme}
+      />
+
+      {/* HTML & CSS Code Reference Catalog Modal */}
+      <CodeReferenceModal
+        isOpen={isCodeReferenceOpen}
+        onClose={() => setIsCodeReferenceOpen(false)}
+        theme={theme}
+        onInsertHtml={(code) => {
+          setHtmlCode(prev => prev + code);
+          addToast('HTML Injected ✨', 'Added element to HTML editor', 'success');
+        }}
+        onInsertCss={(code) => {
+          setCssCode(prev => prev + code);
+          addToast('CSS Injected ✨', 'Added rule to CSS stylesheet', 'success');
+        }}
+        onCopyNotice={(msg) => addToast('Copied', msg, 'info')}
       />
 
       {/* Visual CSS Keyframe & Animation Timeline Studio */}

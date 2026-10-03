@@ -1,6 +1,14 @@
 import type { CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import { snippet } from '@codemirror/autocomplete';
 import { syntaxTree } from '@codemirror/language';
+import { CODE_REFERENCE } from '../data/codeReference';
+
+/* ---------------------------------------------------------
+   Helper: CamelCase to kebab-case
+   --------------------------------------------------------- */
+function toKebabCase(str: string): string {
+  return str.replace(/([a-z0-9]|(?=[A-Z]))([A-Z])/g, '$1-$2').toLowerCase();
+}
 
 /* ---------------------------------------------------------
    Void HTML Tags (Tags without closing tags)
@@ -11,577 +19,472 @@ const VOID_TAGS = new Set([
 ]);
 
 /* ---------------------------------------------------------
-   Comprehensive HTML Tag List
+   Compiled HTML Tag Items from CODE_REFERENCE.htmlTags
    --------------------------------------------------------- */
-const HTML_TAGS = [
-  'a', 'abbr', 'address', 'area', 'article', 'aside', 'audio', 'b', 'base', 'bdi',
-  'bdo', 'blockquote', 'body', 'br', 'button', 'canvas', 'caption', 'cite', 'code',
-  'col', 'colgroup', 'data', 'datalist', 'dd', 'del', 'details', 'dfn', 'dialog',
-  'div', 'dl', 'dt', 'em', 'embed', 'fieldset', 'figcaption', 'figure', 'footer',
-  'form', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'head', 'header', 'hgroup', 'hr',
-  'html', 'i', 'iframe', 'img', 'input', 'ins', 'kbd', 'label', 'legend', 'li',
-  'link', 'main', 'map', 'mark', 'menu', 'meta', 'meter', 'nav', 'noscript', 'object',
-  'ol', 'optgroup', 'option', 'output', 'p', 'param', 'picture', 'pre', 'progress',
-  'q', 'rp', 'rt', 'ruby', 's', 'samp', 'script', 'section', 'select', 'small',
-  'source', 'span', 'strong', 'style', 'sub', 'summary', 'sup', 'table', 'tbody',
-  'td', 'template', 'textarea', 'tfoot', 'th', 'thead', 'time', 'title', 'tr',
-  'track', 'u', 'ul', 'var', 'video', 'wbr'
-];
+export interface HtmlTagSnippetInfo {
+  tag: string;
+  category: string;
+  rawHtml: string;
+  snippetStr: string;
+  detail: string;
+  boost: number;
+}
 
-/* ---------------------------------------------------------
-   Standard HTML Attributes
-   --------------------------------------------------------- */
-const HTML_ATTRIBUTES = [
-  'class', 'id', 'style', 'src', 'href', 'type', 'name', 'value', 'placeholder',
-  'target', 'rel', 'title', 'alt', 'width', 'height', 'disabled', 'required',
-  'readonly', 'checked', 'selected', 'autofocus', 'autocomplete', 'role',
-  'aria-label', 'aria-hidden', 'aria-expanded', 'tabindex', 'data-', 'hidden',
-  'onclick', 'onchange', 'onsubmit', 'method', 'action', 'rows', 'cols',
-  'download', 'preload', 'crossorigin', 'integrity', 'loading', 'as'
-];
+function buildHtmlTagSnippets(): HtmlTagSnippetInfo[] {
+  const result: HtmlTagSnippetInfo[] = [];
+  const tagCategories = CODE_REFERENCE.htmlTags as Record<string, Record<string, string>>;
 
-/* ---------------------------------------------------------
-   Tag Specific Inbuilt Snippets (With Required Attributes)
-   --------------------------------------------------------- */
-export const TAG_SNIPPET_TEMPLATES: Record<string, { label: string; apply: any; detail: string }> = {
-  // 1. Anchor Tag with inbuilt required href attribute
-  'a': {
-    label: '<a href>',
-    apply: snippet('<a href="${1:#}">${0}</a>'),
-    detail: 'Anchor link with href attribute'
-  },
-  'button': {
-    label: '<button>',
-    apply: snippet('<button type="${1:button}">${0}</button>'),
-    detail: 'Button with type attribute'
-  },
-  'img': {
-    label: '<img src alt>',
-    apply: snippet('<img src="${1}" alt="${2}" />'),
-    detail: 'Image with required src and alt'
-  },
-  'input': {
-    label: '<input type>',
-    apply: snippet('<input type="${1:text}" placeholder="${2}" />'),
-    detail: 'Input element with type attribute'
-  },
-  'link': {
-    label: '<link rel="stylesheet">',
-    apply: snippet('<link rel="stylesheet" href="${1:style.css}">'),
-    detail: 'Link external CSS stylesheet'
-  },
-  'script': {
-    label: '<script src>',
-    apply: snippet('<script src="${1:script.js}"></script>'),
-    detail: 'External JavaScript script tag'
-  },
-  'form': {
-    label: '<form action method>',
-    apply: snippet('<form action="${1}" method="${2:post}">\n  ${0}\n</form>'),
-    detail: 'Form with action and method'
-  },
-  'select': {
-    label: '<select option>',
-    apply: snippet('<select name="${1:select}">\n  <option value="${2:val1}">${3:Option 1}</option>\n  <option value="${4:val2}">${5:Option 2}</option>\n</select>'),
-    detail: 'Select dropdown menu'
-  },
-  'textarea': {
-    label: '<textarea>',
-    apply: snippet('<textarea name="${1}" rows="${2:4}" placeholder="${3}"></textarea>'),
-    detail: 'Multi-line text area'
-  },
-  'audio': {
-    label: '<audio controls>',
-    apply: snippet('<audio controls src="${1}"></audio>'),
-    detail: 'Audio player with controls'
-  },
-  'video': {
-    label: '<video controls>',
-    apply: snippet('<video controls width="${1:640}">\n  <source src="${2}" type="video/mp4">\n  Your browser does not support the video tag.\n</video>'),
-    detail: 'Video player with controls'
-  },
-  'iframe': {
-    label: '<iframe src>',
-    apply: snippet('<iframe src="${1}" width="${2:100%}" height="${3:400}" frameborder="0"></iframe>'),
-    detail: 'Embedded iframe frame'
-  },
-  'table': {
-    label: '<table>',
-    apply: snippet('<table>\n  <thead>\n    <tr>\n      <th>${1:Header}</th>\n    </tr>\n  </thead>\n  <tbody>\n    <tr>\n      <td>${2:Data}</td>\n    </tr>\n  </tbody>\n</table>'),
-    detail: 'HTML Table structure'
+  for (const [category, tags] of Object.entries(tagCategories)) {
+    for (const [tag, rawHtml] of Object.entries(tags)) {
+      let snippetStr = '';
+      let detail = `${category.charAt(0).toUpperCase() + category.slice(1)} element (<${tag}>)`;
+      let boost = 3;
+
+      // Tailored interactive snippets for tags from reference
+      if (tag === 'br' || tag === 'hr' || tag === 'wbr') {
+        snippetStr = rawHtml;
+        boost = 2;
+      } else if (tag === 'meta') {
+        snippetStr = '<meta charset="${1:UTF-8}">';
+        detail = 'Meta character encoding tag';
+      } else if (tag === 'link') {
+        snippetStr = '<link rel="${1:stylesheet}" href="${2:style.css}">';
+        detail = 'Link external stylesheet';
+        boost = 10;
+      } else if (tag === 'input') {
+        snippetStr = '<input type="${1:text}" id="${2:name}" name="${3:name}" placeholder="${4}" />';
+        detail = 'HTML input element';
+        boost = 10;
+      } else if (tag === 'button') {
+        snippetStr = '<button type="${1:button}">${0:Click Me}</button>';
+        detail = 'Interactive button element';
+        boost = 10;
+      } else if (tag === 'a') {
+        snippetStr = '<a href="${1:https://example.com}">${0:Link}</a>';
+        detail = 'Anchor hyperlink';
+        boost = 10;
+      } else if (tag === 'img') {
+        snippetStr = '<img src="${1:image.jpg}" alt="${2:Description}" />';
+        detail = 'Image with required src & alt';
+        boost = 9;
+      } else if (tag === 'dialog') {
+        snippetStr = '<dialog ${1:open}>\n  ${0:Dialog content}\n</dialog>';
+        detail = 'Modal / dialog element';
+        boost = 6;
+      } else if (tag === 'details') {
+        snippetStr = '<details>\n  <summary>${1:More information}</summary>\n  <p>${0:Content}</p>\n</details>';
+        detail = 'Expandable details disclosure';
+        boost = 6;
+      } else if (tag === 'summary') {
+        snippetStr = '<summary>${0:Click to expand}</summary>';
+        detail = 'Disclosure summary caption';
+        boost = 5;
+      } else if (tag === 'picture') {
+        snippetStr = '<picture>\n  <source srcset="${1:image.webp}" type="image/webp">\n  <img src="${2:image.jpg}" alt="${3:Image}">\n</picture>';
+        detail = 'Responsive picture container';
+        boost = 6;
+      } else if (tag === 'video') {
+        snippetStr = '<video controls width="${1:640}">\n  <source src="${2:video.mp4}" type="video/mp4">\n</video>';
+        detail = 'HTML5 video player';
+        boost = 7;
+      } else if (tag === 'audio') {
+        snippetStr = '<audio controls>\n  <source src="${1:audio.mp3}" type="audio/mpeg">\n</audio>';
+        detail = 'HTML5 audio player';
+        boost = 7;
+      } else if (tag === 'form') {
+        snippetStr = '<form action="${1:/submit}" method="${2:post}">\n  ${0}\n</form>';
+        detail = 'Form container with action/method';
+        boost = 8;
+      } else if (tag === 'select') {
+        snippetStr = '<select name="${1:select}">\n  <option value="${2:1}">${3:Option 1}</option>\n  <option value="${4:2}">${5:Option 2}</option>\n</select>';
+        detail = 'Select dropdown list';
+        boost = 8;
+      } else if (tag === 'option') {
+        snippetStr = '<option value="${1:1}">${0:Option}</option>';
+        detail = 'Select dropdown option';
+        boost = 5;
+      } else if (tag === 'optgroup') {
+        snippetStr = '<optgroup label="${1:Group}">\n  <option>${0:Item}</option>\n</optgroup>';
+        detail = 'Option group container';
+        boost = 4;
+      } else if (tag === 'datalist') {
+        snippetStr = '<datalist id="${1:suggestions}">\n  <option value="${2:Option}">\n</datalist>';
+        detail = 'Predefined option list';
+        boost = 5;
+      } else if (tag === 'table') {
+        snippetStr = '<table>\n  <thead>\n    <tr>\n      <th>${1:Heading}</th>\n    </tr>\n  </thead>\n  <tbody>\n    <tr>\n      <td>${2:Data}</td>\n    </tr>\n  </tbody>\n</table>';
+        detail = 'Structured HTML table';
+        boost = 7;
+      } else if (tag === 'hgroup') {
+        snippetStr = '<hgroup>\n  <h1>${1:Title}</h1>\n  <p>${2:Subtitle}</p>\n</hgroup>';
+        detail = 'Heading group element';
+        boost = 5;
+      } else if (tag === 'search') {
+        snippetStr = '<search>\n  ${0}\n</search>';
+        detail = 'Semantic search container';
+        boost = 6;
+      } else if (tag === 'ruby') {
+        snippetStr = '<ruby>${1:漢}<rt>${2:Kan}</rt></ruby>';
+        detail = 'East Asian ruby phonetic annotation';
+        boost = 4;
+      } else if (tag === 'abbr') {
+        snippetStr = '<abbr title="${1:HyperText Markup Language}">${2:HTML}</abbr>';
+        detail = 'Abbreviation with explanation';
+        boost = 5;
+      } else if (tag === 'time') {
+        snippetStr = '<time datetime="${1:2026-10-03}">${2:October 3}</time>';
+        detail = 'Machine-readable date/time';
+        boost = 5;
+      } else if (tag === 'data') {
+        snippetStr = '<data value="${1:123}">${2:Product}</data>';
+        detail = 'Machine-readable data tag';
+        boost = 4;
+      } else if (tag === 'progress') {
+        snippetStr = '<progress value="${1:50}" max="${2:100}"></progress>';
+        detail = 'Progress bar indicator';
+        boost = 5;
+      } else if (tag === 'meter') {
+        snippetStr = '<meter value="${1:0.7}">${2:70%}</meter>';
+        detail = 'Scalar gauge measurement';
+        boost = 5;
+      } else if (tag === 'template') {
+        snippetStr = '<template>\n  <div>${0:Template content}</div>\n</template>';
+        detail = 'Client-side template container';
+        boost = 5;
+      } else if (tag === 'slot') {
+        snippetStr = '<slot name="${1:content}"></slot>';
+        detail = 'Web Component placeholder slot';
+        boost = 5;
+      } else if (tag === 'textarea') {
+        snippetStr = '<textarea rows="${1:4}" cols="${2:30}" placeholder="${3}">${0}</textarea>';
+        detail = 'Multi-line text input';
+        boost = 8;
+      } else if (tag === 'ul') {
+        snippetStr = '<ul>\n  <li>${1:Item}</li>\n</ul>';
+        boost = 7;
+      } else if (tag === 'ol') {
+        snippetStr = '<ol>\n  <li>${1:Item}</li>\n</ol>';
+        boost = 7;
+      } else if (tag === 'dl') {
+        snippetStr = '<dl>\n  <dt>${1:Term}</dt>\n  <dd>${2:Description}</dd>\n</dl>';
+        boost = 5;
+      } else if (tag === 'div') {
+        snippetStr = '<div>\n  ${0}\n</div>';
+        boost = 10;
+      } else if (tag === 'section' || tag === 'article' || tag === 'aside' || tag === 'header' || tag === 'footer' || tag === 'nav' || tag === 'main' || tag === 'menu') {
+        snippetStr = `<${tag}>\n  \${0}\n</${tag}>`;
+        boost = 7;
+      } else {
+        // Parse rawHtml for standard tags
+        const match = rawHtml.match(/^<([a-zA-Z0-9_-]+)([^>]*)>(.*)<\/\1>$/s);
+        if (match) {
+          const [, tagName, attrs, inner] = match;
+          const trimmed = inner.trim();
+          if (trimmed) {
+            snippetStr = `<${tagName}${attrs}>\${0:${trimmed}}</${tagName}>`;
+          } else {
+            snippetStr = `<${tagName}${attrs}>\${0}</${tagName}>`;
+          }
+        } else {
+          snippetStr = `<${tag}>\${0}</${tag}>`;
+        }
+      }
+
+      result.push({
+        tag,
+        category,
+        rawHtml,
+        snippetStr,
+        detail,
+        boost
+      });
+    }
   }
-};
+
+  return result;
+}
+
+export const HTML_TAG_SNIPPETS = buildHtmlTagSnippets();
 
 /* ---------------------------------------------------------
-   All Types of Link & Script Linking Snippets
+   Compiled HTML Attributes from CODE_REFERENCE.htmlAttributes
+   --------------------------------------------------------- */
+export interface HtmlAttributeInfo {
+  attr: string;
+  sampleVal: string;
+  snippetStr: string;
+  detail: string;
+  isBoolean: boolean;
+}
+
+function buildHtmlAttributes(): HtmlAttributeInfo[] {
+  const result: HtmlAttributeInfo[] = [];
+  const entries = Object.entries(CODE_REFERENCE.htmlAttributes);
+
+  const booleanAttrs = new Set([
+    'disabled', 'readonly', 'required', 'checked', 'selected', 'multiple',
+    'autofocus', 'hidden', 'download', 'controls', 'autoplay', 'muted', 'loop',
+    'async', 'defer'
+  ]);
+
+  for (const [key, rawStr] of entries) {
+    const isBool = booleanAttrs.has(key);
+    let sampleVal = '';
+    let snippetStr = '';
+
+    const eqMatch = rawStr.match(/^([a-zA-Z0-9_\-]+)="([^"]*)"$/);
+    if (eqMatch) {
+      sampleVal = eqMatch[2];
+      snippetStr = `${key}="\${1:${sampleVal}}"`;
+    } else if (isBool) {
+      snippetStr = key;
+    } else {
+      snippetStr = `${key}="\${0}"`;
+    }
+
+    result.push({
+      attr: key,
+      sampleVal,
+      snippetStr,
+      detail: `HTML attribute (${rawStr})`,
+      isBoolean: isBool
+    });
+  }
+
+  return result;
+}
+
+export const COMPILED_HTML_ATTRIBUTES = buildHtmlAttributes();
+
+/* ---------------------------------------------------------
+   Fast Lookup for Link and Script Shortcuts
    --------------------------------------------------------- */
 export const LINK_AND_SCRIPT_SNIPPETS = [
-  // Link Variants
-  {
-    prefix: 'link:css',
-    label: 'link:css',
-    apply: snippet('<link rel="stylesheet" href="${1:style.css}">'),
-    detail: 'Link external CSS stylesheet',
-    boost: 10
-  },
-  {
-    prefix: 'link:suicss',
-    label: 'link:suicss',
-    apply: snippet('<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Suman-11-web/SUI-FRAMEWORK.CSS@v2.0.0/dist/sui.min.css">'),
-    detail: 'SUI Framework 2.0 CSS CDN',
-    boost: 12
-  },
-  {
-    prefix: 'link:favicon',
-    label: 'link:favicon',
-    apply: snippet('<link rel="shortcut icon" href="${1:favicon.ico}" type="image/x-icon">'),
-    detail: 'Link favicon icon',
-    boost: 9
-  },
-  {
-    prefix: 'link:font',
-    label: 'link:font (Google Fonts)',
-    apply: snippet('<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link href="${1:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap}" rel="stylesheet">'),
-    detail: 'Google Fonts with preconnect links',
-    boost: 9
-  },
-  {
-    prefix: 'link:googlefonts',
-    label: 'link:googlefonts',
-    apply: snippet('<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link href="${1:https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap}" rel="stylesheet">'),
-    detail: 'Google Fonts preconnect + stylesheet',
-    boost: 8
-  },
-  {
-    prefix: 'link:fontawesome',
-    label: 'link:fontawesome',
-    apply: snippet('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">'),
-    detail: 'Font Awesome 6 icons CDN',
-    boost: 8
-  },
-  {
-    prefix: 'link:bootstrap',
-    label: 'link:bootstrap',
-    apply: snippet('<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">'),
-    detail: 'Bootstrap 5.3 CSS CDN',
-    boost: 8
-  },
-  {
-    prefix: 'link:animate',
-    label: 'link:animate',
-    apply: snippet('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">'),
-    detail: 'Animate.css CDN',
-    boost: 7
-  },
-  {
-    prefix: 'link:canonical',
-    label: 'link:canonical',
-    apply: snippet('<link rel="canonical" href="${1:https://example.com/}">'),
-    detail: 'Canonical URL link',
-    boost: 7
-  },
-  {
-    prefix: 'link:manifest',
-    label: 'link:manifest',
-    apply: snippet('<link rel="manifest" href="${1:manifest.json}">'),
-    detail: 'Web App Manifest link',
-    boost: 7
-  },
-  {
-    prefix: 'link:apple',
-    label: 'link:apple-touch-icon',
-    apply: snippet('<link rel="apple-touch-icon" href="${1:apple-touch-icon.png}">'),
-    detail: 'Apple Touch Icon link',
-    boost: 6
-  },
-  {
-    prefix: 'link:preload',
-    label: 'link:preload',
-    apply: snippet('<link rel="preload" href="${1:style.css}" as="${2:style}">'),
-    detail: 'Resource preload link',
-    boost: 6
-  },
+  // Links
+  { prefix: 'link:css', label: 'link:css', apply: snippet('<link rel="stylesheet" href="${1:style.css}">'), detail: 'Link external CSS stylesheet', boost: 12 },
+  { prefix: 'link:favicon', label: 'link:favicon', apply: snippet('<link rel="shortcut icon" href="${1:favicon.ico}" type="image/x-icon">'), detail: 'Link favicon icon', boost: 9 },
+  { prefix: 'link:font', label: 'link:font (Google Fonts)', apply: snippet('<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link href="${1:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap}" rel="stylesheet">'), detail: 'Google Fonts with preconnect links', boost: 10 },
+  { prefix: 'link:fontawesome', label: 'link:fontawesome', apply: snippet('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">'), detail: 'Font Awesome 6 icons CDN', boost: 9 },
+  { prefix: 'link:bootstrap', label: 'link:bootstrap', apply: snippet('<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">'), detail: 'Bootstrap 5.3 CSS CDN', boost: 9 },
+  { prefix: 'link:animate', label: 'link:animate', apply: snippet('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">'), detail: 'Animate.css CDN', boost: 8 },
+  { prefix: 'link:canonical', label: 'link:canonical', apply: snippet('<link rel="canonical" href="${1:https://example.com/}">'), detail: 'Canonical URL link', boost: 7 },
+  { prefix: 'link:manifest', label: 'link:manifest', apply: snippet('<link rel="manifest" href="${1:manifest.json}">'), detail: 'Web App Manifest link', boost: 7 },
+  { prefix: 'link:preload', label: 'link:preload', apply: snippet('<link rel="preload" href="${1:style.css}" as="${2:style}">'), detail: 'Resource preload link', boost: 7 },
 
-  // Script Variants
-  {
-    prefix: 'link:js',
-    label: 'link:js',
-    apply: snippet('<script src="${1:script.js}"></script>'),
-    detail: 'Link JavaScript file (<script src>)',
-    boost: 10
-  },
-  {
-    prefix: 'script:src',
-    label: 'script:src',
-    apply: snippet('<script src="${1:script.js}"></script>'),
-    detail: 'External JavaScript script tag',
-    boost: 10
-  },
-  {
-    prefix: 'script:js',
-    label: 'script:js',
-    apply: snippet('<script src="${1:script.js}"></script>'),
-    detail: 'External JavaScript script tag',
-    boost: 10
-  },
-  {
-    prefix: 'script:suijs',
-    label: 'script:suijs',
-    apply: snippet('<script src="https://cdn.jsdelivr.net/gh/Suman-11-web/SUI-FRAMEWORK.CSS@v2.0.0/dist/sui.min.js"></script>'),
-    detail: 'SUI Framework 2.0 JavaScript CDN',
-    boost: 12
-  },
-  {
-    prefix: 'script:tailwind',
-    label: 'script:tailwind',
-    apply: snippet('<script src="https://cdn.tailwindcss.com"></script>'),
-    detail: 'Tailwind CSS Play CDN script',
-    boost: 9
-  },
-  {
-    prefix: 'script:module',
-    label: 'script:module',
-    apply: snippet('<script type="module" src="${1:main.js}"></script>'),
-    detail: 'ES Module script tag',
-    boost: 8
-  },
-  {
-    prefix: 'script:defer',
-    label: 'script:defer',
-    apply: snippet('<script src="${1:script.js}" defer></script>'),
-    detail: 'Deferred script tag',
-    boost: 8
-  },
-  {
-    prefix: 'script:async',
-    label: 'script:async',
-    apply: snippet('<script src="${1:script.js}" async></script>'),
-    detail: 'Asynchronous script tag',
-    boost: 8
-  },
-  {
-    prefix: 'script:confetti',
-    label: 'script:confetti',
-    apply: snippet('<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.2/dist/confetti.browser.min.js"></script>'),
-    detail: 'Canvas Confetti party animation CDN',
-    boost: 8
-  },
-  {
-    prefix: 'script:three',
-    label: 'script:three (Three.js)',
-    apply: snippet('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>'),
-    detail: 'Three.js 3D WebGL library CDN',
-    boost: 8
-  },
-  {
-    prefix: 'script:gsap',
-    label: 'script:gsap',
-    apply: snippet('<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>'),
-    detail: 'GSAP Animation library CDN',
-    boost: 8
-  },
-  {
-    prefix: 'script:axios',
-    label: 'script:axios',
-    apply: snippet('<script src="https://cdn.jsdelivr.net/npm/axios@1.6.8/dist/axios.min.js"></script>'),
-    detail: 'Axios HTTP Client CDN',
-    boost: 7
-  },
-  {
-    prefix: 'script:lodash',
-    label: 'script:lodash',
-    apply: snippet('<script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>'),
-    detail: 'Lodash Utility library CDN',
-    boost: 7
-  },
+  // Scripts
+  { prefix: 'script:src', label: 'script:src', apply: snippet('<script src="${1:app.js}" defer></script>'), detail: 'External JavaScript script tag', boost: 12 },
+  { prefix: 'script:js', label: 'script:js', apply: snippet('<script src="${1:app.js}"></script>'), detail: 'External JavaScript script tag', boost: 11 },
+  { prefix: 'script:module', label: 'script:module', apply: snippet('<script type="module" src="${1:main.js}"></script>'), detail: 'ES Module script tag', boost: 9 },
+  { prefix: 'script:defer', label: 'script:defer', apply: snippet('<script src="${1:app.js}" defer></script>'), detail: 'Deferred script tag', boost: 9 },
+  { prefix: 'script:async', label: 'script:async', apply: snippet('<script src="${1:app.js}" async></script>'), detail: 'Asynchronous script tag', boost: 9 },
+  { prefix: 'script:tailwind', label: 'script:tailwind', apply: snippet('<script src="https://cdn.tailwindcss.com"></script>'), detail: 'Tailwind CSS Play CDN script', boost: 9 },
 
-  // Anchor Variants (All with inbuilt href attribute)
-  {
-    prefix: 'a:blank',
-    label: 'a:blank',
-    apply: snippet('<a href="${1:https://}" target="_blank" rel="noopener noreferrer">${0}</a>'),
-    detail: 'Link opening in new tab (_blank)',
-    boost: 10
-  },
-  {
-    prefix: 'a:external',
-    label: 'a:external',
-    apply: snippet('<a href="${1:https://}" target="_blank" rel="noopener noreferrer">${0}</a>'),
-    detail: 'External link with secure rel',
-    boost: 9
-  },
-  {
-    prefix: 'a:mail',
-    label: 'a:mail',
-    apply: snippet('<a href="mailto:${1:name@example.com}">${0}</a>'),
-    detail: 'Email mailto link',
-    boost: 8
-  },
-  {
-    prefix: 'a:tel',
-    label: 'a:tel',
-    apply: snippet('<a href="tel:${1:+1234567890}">${0}</a>'),
-    detail: 'Telephone phone link',
-    boost: 8
-  },
-  {
-    prefix: 'a:btn',
-    label: 'a:btn',
-    apply: snippet('<a href="${1:#}" class="btn ${2:btn-primary}">${0}</a>'),
-    detail: 'Anchor tag styled as button',
-    boost: 9
-  },
-  {
-    prefix: 'a:suibtn',
-    label: 'a:suibtn',
-    apply: snippet('<a href="${1:#}" class="sui-btn ${2:sui-btn-primary}">${0}</a>'),
-    detail: 'Anchor tag styled as SUI button',
-    boost: 9
-  },
-  {
-    prefix: 'a:download',
-    label: 'a:download',
-    apply: snippet('<a href="${1:file.pdf}" download="${2:filename}">${0}</a>'),
-    detail: 'Download file link',
-    boost: 7
-  },
+  // Anchors
+  { prefix: 'a:blank', label: 'a:blank', apply: snippet('<a href="${1:https://example.com}" target="_blank" rel="noopener noreferrer">${0}</a>'), detail: 'Link opening in new tab (_blank)', boost: 10 },
+  { prefix: 'a:mail', label: 'a:mail', apply: snippet('<a href="mailto:${1:name@example.com}">${0}</a>'), detail: 'Email mailto link', boost: 8 },
+  { prefix: 'a:tel', label: 'a:tel', apply: snippet('<a href="tel:${1:+1234567890}">${0}</a>'), detail: 'Telephone phone link', boost: 8 },
+  { prefix: 'a:download', label: 'a:download', apply: snippet('<a href="${1:file.pdf}" download="${2:filename}">${0}</a>'), detail: 'Download file link', boost: 7 },
 
-  // Button Variants
-  {
-    prefix: 'btn',
-    label: 'btn',
-    apply: snippet('<button type="button" class="btn ${1:btn-primary}">${0}</button>'),
-    detail: 'Button with class="btn"',
-    boost: 10
-  },
-  {
-    prefix: 'btn:primary',
-    label: 'btn:primary',
-    apply: snippet('<button type="button" class="btn btn-primary">${0}</button>'),
-    detail: 'Primary action button',
-    boost: 10
-  },
-  {
-    prefix: 'btn:secondary',
-    label: 'btn:secondary',
-    apply: snippet('<button type="button" class="btn btn-secondary">${0}</button>'),
-    detail: 'Secondary action button',
-    boost: 9
-  },
-  {
-    prefix: 'btn:outline',
-    label: 'btn:outline',
-    apply: snippet('<button type="button" class="btn btn-outline">${0}</button>'),
-    detail: 'Outline action button',
-    boost: 8
-  },
-  {
-    prefix: 'btn:danger',
-    label: 'btn:danger',
-    apply: snippet('<button type="button" class="btn btn-danger">${0}</button>'),
-    detail: 'Danger/Delete action button',
-    boost: 8
-  },
-  {
-    prefix: 'btn:sui',
-    label: 'btn:sui',
-    apply: snippet('<button type="button" class="sui-btn sui-btn-primary">${0}</button>'),
-    detail: 'SUI Framework primary button',
-    boost: 11
-  },
-  {
-    prefix: 'btn:suisecondary',
-    label: 'btn:suisecondary',
-    apply: snippet('<button type="button" class="sui-btn sui-btn-secondary">${0}</button>'),
-    detail: 'SUI Framework secondary button',
-    boost: 9
-  },
-  {
-    prefix: 'btn:suioutline',
-    label: 'btn:suioutline',
-    apply: snippet('<button type="button" class="sui-btn sui-btn-outline">${0}</button>'),
-    detail: 'SUI Framework outline button',
-    boost: 9
-  },
-  {
-    prefix: 'btn:submit',
-    label: 'btn:submit',
-    apply: snippet('<button type="submit" class="btn btn-primary">${1:Submit}</button>'),
-    detail: 'Submit form button',
-    boost: 9
-  },
-  {
-    prefix: 'button:submit',
-    label: 'button:submit',
-    apply: snippet('<button type="submit">${1:Submit}</button>'),
-    detail: 'Submit button with type="submit"',
-    boost: 10
-  },
-  {
-    prefix: 'button:reset',
-    label: 'button:reset',
-    apply: snippet('<button type="reset">${1:Reset}</button>'),
-    detail: 'Reset button with type="reset"',
-    boost: 8
-  },
-  {
-    prefix: 'btn:icon',
-    label: 'btn:icon',
-    apply: snippet('<button type="button" class="btn-icon" aria-label="${1:Action}">\n  ${0}\n</button>'),
-    detail: 'Accessible icon button',
-    boost: 7
-  },
+  // Buttons
+  { prefix: 'btn:primary', label: 'btn:primary', apply: snippet('<button type="button" class="btn btn-primary">${0}</button>'), detail: 'Primary action button', boost: 10 },
+  { prefix: 'btn:submit', label: 'btn:submit', apply: snippet('<button type="submit">${1:Submit}</button>'), detail: 'Form submit button', boost: 10 },
+  { prefix: 'btn:reset', label: 'btn:reset', apply: snippet('<button type="reset">${1:Reset}</button>'), detail: 'Form reset button', boost: 8 },
 
-  // Input Variants
-  {
-    prefix: 'input:text',
-    label: 'input:text',
-    apply: snippet('<input type="text" name="${1}" placeholder="${2}" />'),
-    detail: 'Text input with placeholder',
-    boost: 9
-  },
-  {
-    prefix: 'input:password',
-    label: 'input:password',
-    apply: snippet('<input type="password" name="${1}" placeholder="${2:Password}" />'),
-    detail: 'Password input',
-    boost: 8
-  },
-  {
-    prefix: 'input:email',
-    label: 'input:email',
-    apply: snippet('<input type="email" name="${1}" placeholder="${2:name@example.com}" />'),
-    detail: 'Email input with validation',
-    boost: 8
-  },
-  {
-    prefix: 'input:number',
-    label: 'input:number',
-    apply: snippet('<input type="number" name="${1}" min="${2:0}" max="${3:100}" />'),
-    detail: 'Number input with min/max',
-    boost: 7
-  },
-  {
-    prefix: 'input:checkbox',
-    label: 'input:checkbox',
-    apply: snippet('<label class="checkbox-item"><input type="checkbox" name="${1}" /> ${2:Remember me}</label>'),
-    detail: 'Checkbox input with label',
-    boost: 7
-  },
-  {
-    prefix: 'input:radio',
-    label: 'input:radio',
-    apply: snippet('<label class="radio-item"><input type="radio" name="${1:group}" value="${2}" /> ${3:Option}</label>'),
-    detail: 'Radio input with label',
-    boost: 7
-  },
-  {
-    prefix: 'input:file',
-    label: 'input:file',
-    apply: snippet('<input type="file" name="${1}" accept="${2:image/*}" />'),
-    detail: 'File upload input',
-    boost: 7
-  },
-  {
-    prefix: 'input:submit',
-    label: 'input:submit',
-    apply: snippet('<input type="submit" value="${1:Submit}" />'),
-    detail: 'Submit input element',
-    boost: 7
-  },
-
-  // Form Variants
-  {
-    prefix: 'form:post',
-    label: 'form:post',
-    apply: snippet('<form action="${1}" method="post">\n  ${0}\n</form>'),
-    detail: 'Form with method="post"',
-    boost: 9
-  },
-  {
-    prefix: 'form:get',
-    label: 'form:get',
-    apply: snippet('<form action="${1}" method="get">\n  ${0}\n</form>'),
-    detail: 'Form with method="get"',
-    boost: 8
-  },
-
-  // Meta Tags
-  {
-    prefix: 'meta:vp',
-    label: 'meta:vp (viewport)',
-    apply: snippet('<meta name="viewport" content="width=device-width, initial-scale=1.0">'),
-    detail: 'Responsive viewport meta tag',
-    boost: 9
-  },
-  {
-    prefix: 'meta:utf',
-    label: 'meta:utf (charset)',
-    apply: snippet('<meta charset="UTF-8">'),
-    detail: 'UTF-8 charset meta tag',
-    boost: 9
-  },
-  {
-    prefix: 'meta:desc',
-    label: 'meta:desc',
-    apply: snippet('<meta name="description" content="${1}">'),
-    detail: 'SEO page description meta tag',
-    boost: 8
-  },
-  {
-    prefix: 'meta:og',
-    label: 'meta:og (OpenGraph)',
-    apply: snippet('<meta property="og:title" content="${1}">\n<meta property="og:description" content="${2}">\n<meta property="og:image" content="${3}">'),
-    detail: 'Social sharing OpenGraph meta tags',
-    boost: 8
-  },
-
-  // Component Structures
-  {
-    prefix: 'card:sui',
-    label: 'card:sui',
-    apply: snippet('<div class="sui-card">\n  <div class="sui-card-header">\n    <h3 class="sui-card-title">${1:Card Title}</h3>\n  </div>\n  <div class="sui-card-body">\n    <p>${0}</p>\n  </div>\n</div>'),
-    detail: 'SUI Framework card component',
-    boost: 9
-  },
-  {
-    prefix: 'alert:sui',
-    label: 'alert:sui',
-    apply: snippet('<div class="sui-alert sui-alert-info">\n  ${0:Information alert message}\n</div>'),
-    detail: 'SUI Framework alert notification',
-    boost: 8
-  }
+  // Inputs
+  { prefix: 'input:text', label: 'input:text', apply: snippet('<input type="text" id="${1:name}" name="${2:name}" placeholder="${3:Type here...}" />'), detail: 'Text input with placeholder', boost: 10 },
+  { prefix: 'input:password', label: 'input:password', apply: snippet('<input type="password" id="${1:password}" name="${2:password}" placeholder="${3:Password}" />'), detail: 'Password input', boost: 9 },
+  { prefix: 'input:email', label: 'input:email', apply: snippet('<input type="email" id="${1:email}" name="${2:email}" placeholder="${3:name@example.com}" />'), detail: 'Email input', boost: 9 },
+  { prefix: 'input:number', label: 'input:number', apply: snippet('<input type="number" id="${1:qty}" name="${2:qty}" min="${3:0}" max="${4:100}" />'), detail: 'Numeric input', boost: 8 },
+  { prefix: 'input:file', label: 'input:file', apply: snippet('<input type="file" id="${1:file}" name="${2:file}" accept="${3:image/*}" />'), detail: 'File upload input', boost: 9 },
+  { prefix: 'input:checkbox', label: 'input:checkbox', apply: snippet('<input type="checkbox" id="${1:check}" name="${2:check}" checked />'), detail: 'Checkbox input', boost: 8 },
+  { prefix: 'input:radio', label: 'input:radio', apply: snippet('<input type="radio" id="${1:opt}" name="${2:choice}" value="${3:val}" />'), detail: 'Radio button input', boost: 8 },
+  { prefix: 'input:date', label: 'input:date', apply: snippet('<input type="date" id="${1:date}" name="${2:date}" />'), detail: 'Date picker input', boost: 8 },
+  { prefix: 'input:color', label: 'input:color', apply: snippet('<input type="color" id="${1:color}" name="${2:color}" value="${3:#3b82f6}" />'), detail: 'Color picker input', boost: 8 },
+  { prefix: 'input:range', label: 'input:range', apply: snippet('<input type="range" id="${1:range}" name="${2:range}" min="${3:0}" max="${4:100}" />'), detail: 'Range slider input', boost: 8 }
 ];
 
 /* ---------------------------------------------------------
-   Attribute-Specific Value Completions
+   Compiled CSS Properties from CODE_REFERENCE.cssProperties
    --------------------------------------------------------- */
-const INPUT_TYPES = [
-  'text', 'password', 'email', 'number', 'checkbox', 'radio',
-  'button', 'submit', 'reset', 'file', 'date', 'time', 'color',
-  'range', 'search', 'url', 'tel', 'hidden'
-];
+export interface CssPropertyInfo {
+  prop: string;
+  sampleVal: string;
+  snippetStr: string;
+  detail: string;
+  boost: number;
+}
 
-const TARGET_VALUES = ['_blank', '_self', '_parent', '_top'];
+function buildCssProperties(): CssPropertyInfo[] {
+  const result: CssPropertyInfo[] = [];
+  const entries = Object.entries(CODE_REFERENCE.cssProperties);
 
-const REL_VALUES = [
-  'stylesheet', 'noopener noreferrer', 'noopener', 'noreferrer',
-  'icon', 'preload', 'prefetch', 'author', 'canonical', 'manifest'
-];
+  for (const [key, rawRule] of entries) {
+    const propName = toKebabCase(key);
+    let sampleVal = '';
+    const colonIdx = rawRule.indexOf(':');
 
-const METHOD_VALUES = ['GET', 'POST'];
+    if (colonIdx !== -1) {
+      sampleVal = rawRule.slice(colonIdx + 1).trim().replace(/;$/, '');
+    }
 
-const COMMON_CLASSES = [
-  'container', 'flex', 'grid', 'btn', 'card', 'active', 'hidden',
-  'text-center', 'box', 'header', 'footer', 'nav', 'modal', 'badge',
-  'items-center', 'justify-between', 'justify-center', 'gap-2', 'gap-4',
-  'p-2', 'p-4', 'm-2', 'm-4', 'rounded-lg', 'shadow-md', 'w-full', 'h-full',
-  'sui-btn', 'sui-card', 'sui-badge', 'sui-alert', 'sui-container', 'sui-grid'
-];
+    const snippetStr = sampleVal
+      ? `${propName}: \${1:${sampleVal}};`
+      : `${propName}: \${0};`;
+
+    let boost = 3;
+    if (['display', 'color', 'background', 'background-color', 'font-size', 'font-family', 'margin', 'padding', 'border', 'border-radius', 'width', 'height', 'flex', 'grid', 'position', 'align-items', 'justify-content', 'gap', 'cursor', 'opacity', 'transform', 'transition', 'box-shadow', 'overflow'].includes(propName)) {
+      boost = 10;
+    } else if (['color-scheme', 'container', 'container-type', 'field-sizing', 'interpolate-size', 'view-transition-name', 'anchor-name', 'position-anchor', 'position-area', 'overlay', 'transition-behavior', 'animation-composition'].includes(propName)) {
+      boost = 8;
+    }
+
+    result.push({
+      prop: propName,
+      sampleVal,
+      snippetStr,
+      detail: `CSS: ${rawRule}`,
+      boost
+    });
+  }
+
+  return result;
+}
+
+export const COMPILED_CSS_PROPERTIES = buildCssProperties();
+
+/* ---------------------------------------------------------
+   Compiled CSS Selectors from CODE_REFERENCE.cssSelectors
+   --------------------------------------------------------- */
+export interface CssSelectorInfo {
+  selector: string;
+  name: string;
+  snippetStr: string;
+  detail: string;
+}
+
+function buildCssSelectors(): CssSelectorInfo[] {
+  const result: CssSelectorInfo[] = [];
+  const entries = Object.entries(CODE_REFERENCE.cssSelectors);
+
+  for (const [name, sel] of entries) {
+    let snippetStr = '';
+    if (sel.startsWith(':') || sel.startsWith('::')) {
+      if (sel === '::before' || sel === '::after') {
+        snippetStr = `${sel} {\n  content: "";\n  \${0}\n}`;
+      } else if (sel.includes('(')) {
+        snippetStr = `${sel} {\n  \${0}\n}`;
+      } else {
+        snippetStr = `${sel} {\n  \${0}\n}`;
+      }
+    } else {
+      snippetStr = `${sel} {\n  \${0}\n}`;
+    }
+
+    result.push({
+      selector: sel,
+      name,
+      snippetStr,
+      detail: `CSS Selector (${sel})`
+    });
+  }
+
+  return result;
+}
+
+export const COMPILED_CSS_SELECTORS = buildCssSelectors();
+
+/* ---------------------------------------------------------
+   Compiled CSS At-Rules from CODE_REFERENCE.cssAtRules
+   --------------------------------------------------------- */
+export interface CssAtRuleInfo {
+  rule: string;
+  name: string;
+  snippetStr: string;
+  detail: string;
+}
+
+function buildCssAtRules(): CssAtRuleInfo[] {
+  const result: CssAtRuleInfo[] = [];
+  const entries = Object.entries(CODE_REFERENCE.cssAtRules);
+
+  for (const [name, rawRule] of entries) {
+    const atName = rawRule.split(/\s/)[0]; // e.g. '@media', '@keyframes'
+    let snippetStr = rawRule;
+
+    if (atName === '@media') {
+      snippetStr = '@media (max-width: ${1:768px}) {\n  ${0}\n}';
+    } else if (atName === '@keyframes') {
+      snippetStr = '@keyframes ${1:fadeIn} {\n  from { opacity: 0; }\n  to { opacity: 1; }\n}';
+    } else if (atName === '@container') {
+      snippetStr = '@container (min-width: ${1:400px}) {\n  ${0}\n}';
+    } else if (atName === '@supports') {
+      snippetStr = '@supports (${1:display: grid}) {\n  ${0}\n}';
+    } else if (atName === '@property') {
+      snippetStr = '@property --${1:my-color} {\n  syntax: "<color>";\n  inherits: true;\n  initial-value: ${2:red};\n}';
+    } else if (atName === '@starting-style') {
+      snippetStr = '@starting-style {\n  opacity: 0;\n  ${0}\n}';
+    } else if (atName === '@font-face') {
+      snippetStr = '@font-face {\n  font-family: "${1:MyFont}";\n  src: url("${2:font.woff2}");\n}';
+    }
+
+    result.push({
+      rule: atName,
+      name,
+      snippetStr,
+      detail: rawRule
+    });
+  }
+
+  return result;
+}
+
+export const COMPILED_CSS_AT_RULES = buildCssAtRules();
+
+/* ---------------------------------------------------------
+   CSS Values Map from CODE_REFERENCE.cssValues
+   --------------------------------------------------------- */
+const CSS_PROPERTY_VALUE_MAP: Record<string, string[]> = {
+  'display': CODE_REFERENCE.cssValues.display,
+  'position': CODE_REFERENCE.cssValues.position,
+  'flex-direction': CODE_REFERENCE.cssValues.flexDirection,
+  'flex-flow': ['row wrap', 'row nowrap', 'column wrap', 'column nowrap'],
+  'flex-wrap': CODE_REFERENCE.cssValues.flexWrap,
+  'justify-content': CODE_REFERENCE.cssValues.justifyContent,
+  'align-items': CODE_REFERENCE.cssValues.alignItems,
+  'align-self': CODE_REFERENCE.cssValues.alignItems,
+  'align-content': CODE_REFERENCE.cssValues.justifyContent,
+  'font-weight': CODE_REFERENCE.cssValues.fontWeight,
+  'text-align': CODE_REFERENCE.cssValues.textAlign,
+  'text-align-last': CODE_REFERENCE.cssValues.textAlign,
+  'overflow': CODE_REFERENCE.cssValues.overflow,
+  'overflow-x': CODE_REFERENCE.cssValues.overflow,
+  'overflow-y': CODE_REFERENCE.cssValues.overflow,
+  'cursor': CODE_REFERENCE.cssValues.cursor,
+  'border-style': CODE_REFERENCE.cssValues.borderStyle,
+  'outline-style': CODE_REFERENCE.cssValues.borderStyle,
+  'transition-timing-function': CODE_REFERENCE.cssValues.transitionTiming,
+  'animation-timing-function': CODE_REFERENCE.cssValues.transitionTiming,
+  'object-fit': CODE_REFERENCE.cssValues.objectFit,
+  'background-size': CODE_REFERENCE.cssValues.backgroundSize,
+  'text-decoration': CODE_REFERENCE.cssValues.textDecoration,
+  'text-decoration-line': CODE_REFERENCE.cssValues.textDecoration,
+  'animation-direction': CODE_REFERENCE.cssValues.animationDirection,
+  'box-sizing': CODE_REFERENCE.cssValues.boxSizing,
+  'visibility': CODE_REFERENCE.cssValues.visibility,
+  'white-space': CODE_REFERENCE.cssValues.whiteSpace,
+  'color-scheme': ['light', 'dark', 'light dark', 'only light', 'only dark'],
+  'pointer-events': ['auto', 'none', 'inherit', 'initial'],
+  'user-select': ['none', 'auto', 'text', 'all', 'contain'],
+  'scroll-behavior': ['smooth', 'auto'],
+  'field-sizing': ['content', 'fixed'],
+  'interpolate-size': ['allow-keywords', 'numeric-only'],
+  'overlay': ['auto', 'none'],
+  'transition-behavior': ['allow-discrete', 'normal'],
+  'animation-composition': ['add', 'replace', 'accumulate']
+};
 
 /**
  * Determine if position is inside an unescaped quoted string (double or single quote).
- * Scans backward from pos on the current line to check for unmatched opening quotes.
  */
 function checkQuoteContext(textBefore: string): { insideQuote: boolean; quoteChar: string; attrName?: string } {
   let insideDouble = false;
@@ -607,7 +510,6 @@ function checkQuoteContext(textBefore: string): { insideQuote: boolean; quoteCha
 
   if (insideDouble || insideSingle) {
     const quoteChar = insideDouble ? '"' : "'";
-    // Check if preceded by an attribute name (e.g. class=", type=')
     const beforeQuote = textBefore.slice(0, lastQuotePos);
     const attrMatch = beforeQuote.match(/([a-zA-Z0-9_\-]+)\s*=\s*$/);
     const attrName = attrMatch ? attrMatch[1].toLowerCase() : undefined;
@@ -615,19 +517,6 @@ function checkQuoteContext(textBefore: string): { insideQuote: boolean; quoteCha
   }
 
   return { insideQuote: false, quoteChar: '' };
-}
-
-/**
- * Return default snippet for an HTML tag
- */
-function getTagSnippet(tag: string) {
-  if (TAG_SNIPPET_TEMPLATES[tag]) {
-    return TAG_SNIPPET_TEMPLATES[tag].apply;
-  }
-  if (VOID_TAGS.has(tag)) {
-    return snippet(`<${tag} />`);
-  }
-  return snippet(`<${tag}>\${0}</${tag}>`);
 }
 
 /* ---------------------------------------------------------
@@ -640,42 +529,28 @@ export function htmlCompletions(context: CompletionContext): CompletionResult | 
   const textBefore = line.text.slice(0, pos - line.from);
 
   // 1. Resolve syntax tree to inspect context node and ancestors
-  let nodeName = '';
   let inScriptTag = false;
   let inStyleTag = false;
 
   try {
     const tree = syntaxTree(state);
     let curr = tree.resolveInner(pos, -1);
-    nodeName = curr.name;
 
-    // Walk up ancestor chain
     let temp: typeof curr | null = curr;
     while (temp) {
       if (temp.name === 'Script' || temp.name === 'ScriptText') inScriptTag = true;
       if (temp.name === 'StyleSheet' || temp.name === 'StyleText') inStyleTag = true;
-      if (temp.name === 'AttributeValue' || temp.name === 'QuotedAttributeValue') {
-        nodeName = 'AttributeValue';
-      }
       temp = temp.parent;
     }
   } catch (e) {}
 
-  // If inside <script>, delegate to JS completions (never suggest HTML tags!)
-  if (inScriptTag) {
-    return jsCompletions(context);
-  }
+  if (inScriptTag) return jsCompletions(context);
+  if (inStyleTag) return cssCompletions(context);
 
-  // If inside <style>, delegate to CSS completions (never suggest HTML tags!)
-  if (inStyleTag) {
-    return cssCompletions(context);
-  }
-
-  // 2. Check if cursor is inside double or single quotes
+  // 2. Check if cursor is inside quotes (attribute values)
   const quoteCtx = checkQuoteContext(textBefore);
 
-  if (quoteCtx.insideQuote || nodeName === 'AttributeValue' || nodeName.includes('String') || nodeName === 'Comment') {
-    // Determine the attribute we are in
+  if (quoteCtx.insideQuote) {
     let attr = quoteCtx.attrName;
     if (!attr) {
       const match = textBefore.match(/([a-zA-Z0-9_\-]+)\s*=\s*["'][^"']*$/);
@@ -685,68 +560,53 @@ export function htmlCompletions(context: CompletionContext): CompletionResult | 
     const word = context.matchBefore(/[a-zA-Z0-9_\-]*/);
     const fromPos = word ? word.from : pos;
 
-    // Attribute-specific completions inside quotes
-    if (attr === 'class') {
-      if (!word || (word.from === word.to && !context.explicit)) return null;
-      return {
-        from: fromPos,
-        options: COMMON_CLASSES.map(cls => ({
-          label: cls,
-          type: 'keyword',
-          detail: 'CSS class'
-        }))
-      };
-    }
-
     if (attr === 'type') {
+      const types = ['text', 'password', 'email', 'number', 'checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'date', 'time', 'color', 'range', 'search', 'url', 'tel', 'hidden'];
       return {
         from: fromPos,
-        options: INPUT_TYPES.map(t => ({
-          label: t,
-          type: 'keyword',
-          detail: 'Input type'
-        }))
+        options: types.map(t => ({ label: t, type: 'keyword', detail: 'Input type' }))
       };
     }
 
     if (attr === 'target') {
       return {
         from: fromPos,
-        options: TARGET_VALUES.map(t => ({
-          label: t,
-          type: 'keyword',
-          detail: 'Link target'
-        }))
+        options: ['_blank', '_self', '_parent', '_top'].map(t => ({ label: t, type: 'keyword', detail: 'Link target' }))
       };
     }
 
     if (attr === 'rel') {
       return {
         from: fromPos,
-        options: REL_VALUES.map(r => ({
-          label: r,
-          type: 'keyword',
-          detail: 'Link relation'
-        }))
+        options: ['stylesheet', 'noopener noreferrer', 'noopener', 'noreferrer', 'icon', 'preload', 'prefetch', 'author', 'canonical', 'manifest'].map(r => ({ label: r, type: 'keyword', detail: 'Link relation' }))
       };
     }
 
     if (attr === 'method') {
       return {
         from: fromPos,
-        options: METHOD_VALUES.map(m => ({
-          label: m,
-          type: 'keyword',
-          detail: 'Form method'
-        }))
+        options: ['GET', 'POST'].map(m => ({ label: m, type: 'keyword', detail: 'Form method' }))
       };
     }
 
-    // Inside ANY other double quote or string: DO NOT SUGGEST TAGS!
+    if (attr === 'loading') {
+      return {
+        from: fromPos,
+        options: ['lazy', 'eager'].map(l => ({ label: l, type: 'keyword', detail: 'Image loading' }))
+      };
+    }
+
+    if (attr === 'decoding') {
+      return {
+        from: fromPos,
+        options: ['async', 'sync', 'auto'].map(d => ({ label: d, type: 'keyword', detail: 'Image decoding' }))
+      };
+    }
+
     return null;
   }
 
-  // 3. Check if inside a tag definition (between '<tagname' and '>')
+  // 3. Inside a tag definition (between '<tagname' and '>') -> Suggest Attributes
   const lastOpen = textBefore.lastIndexOf('<');
   const lastClose = textBefore.lastIndexOf('>');
   const insideTag = lastOpen > lastClose;
@@ -754,12 +614,12 @@ export function htmlCompletions(context: CompletionContext): CompletionResult | 
   if (insideTag) {
     const tagContent = textBefore.slice(lastOpen + 1);
 
-    // If typing tag name immediately after '<' (e.g. '<d' or '<h1' without space)
+    // If typing tag name immediately after '<' (e.g. '<s' or '<p')
     if (!/\s/.test(tagContent)) {
       const word = context.matchBefore(/<[a-zA-Z0-9_\-:]*/);
       if (!word || (word.from === word.to && !context.explicit)) return null;
 
-      // Check link / script / button shortcuts first
+      // Special link/script shortcuts
       const specialMatches = LINK_AND_SCRIPT_SNIPPETS.map(snip => ({
         label: `<${snip.prefix}>`,
         apply: snip.apply,
@@ -768,43 +628,47 @@ export function htmlCompletions(context: CompletionContext): CompletionResult | 
         boost: snip.boost + 2
       }));
 
-      const standardTags = HTML_TAGS.map(tag => ({
-        label: `<${tag}>`,
-        apply: getTagSnippet(tag),
+      // Full HTML elements catalog from CODE_REFERENCE
+      const allTags = HTML_TAG_SNIPPETS.map(item => ({
+        label: `<${item.tag}>`,
+        apply: snippet(item.snippetStr),
         type: 'type',
-        detail: TAG_SNIPPET_TEMPLATES[tag]?.detail || (VOID_TAGS.has(tag) ? 'Self-closing tag' : `HTML <${tag}> tag`),
-        boost: tag === 'a' || tag === 'button' || tag === 'div' || tag === 'link' || tag === 'script' ? 5 : 2
+        detail: item.detail,
+        boost: item.boost
       }));
 
       return {
         from: word.from,
-        options: [...specialMatches, ...standardTags]
+        options: [...specialMatches, ...allTags]
       };
     }
 
-    // Space exists after tag name -> user is typing attributes (e.g. '<a ' or '<button ')
+    // Space exists after tag name -> User is typing attributes!
     const word = context.matchBefore(/[a-zA-Z0-9_\-]*/);
     if (!word || (word.from === word.to && !context.explicit)) return null;
 
-    // Detect current tag name to boost tag-specific attributes (e.g. href for a, src for img)
     const tagMatch = tagContent.match(/^([a-zA-Z0-9_\-]+)/);
     const currentTagName = tagMatch ? tagMatch[1].toLowerCase() : '';
 
     return {
       from: word.from,
-      options: HTML_ATTRIBUTES.map(attr => {
+      options: COMPILED_HTML_ATTRIBUTES.map(item => {
         let boost = 2;
-        if (currentTagName === 'a' && (attr === 'href' || attr === 'target' || attr === 'rel')) boost = 10;
-        if (currentTagName === 'img' && (attr === 'src' || attr === 'alt')) boost = 10;
-        if (currentTagName === 'button' && (attr === 'type' || attr === 'onclick')) boost = 10;
-        if (currentTagName === 'link' && (attr === 'rel' || attr === 'href')) boost = 10;
-        if (currentTagName === 'script' && (attr === 'src' || attr === 'type')) boost = 10;
+        if (currentTagName === 'a' && (item.attr === 'href' || item.attr === 'target' || item.attr === 'rel')) boost = 10;
+        if (currentTagName === 'img' && (item.attr === 'src' || item.attr === 'alt' || item.attr === 'loading')) boost = 10;
+        if (currentTagName === 'input' && (item.attr === 'type' || item.attr === 'placeholder' || item.attr === 'name' || item.attr === 'value' || item.attr === 'required')) boost = 10;
+        if (currentTagName === 'button' && (item.attr === 'type' || item.attr === 'disabled')) boost = 10;
+        if (currentTagName === 'link' && (item.attr === 'rel' || item.attr === 'href')) boost = 10;
+        if (currentTagName === 'script' && (item.attr === 'src' || item.attr === 'defer' || item.attr === 'async')) boost = 10;
+        if (currentTagName === 'form' && (item.attr === 'action' || item.attr === 'method')) boost = 10;
+        if (currentTagName === 'label' && item.attr === 'for') boost = 10;
+        if (item.attr === 'class' || item.attr === 'id') boost = 9;
 
         return {
-          label: attr,
-          apply: snippet(`${attr}="\${0}"`),
+          label: item.attr,
+          apply: snippet(item.snippetStr),
           type: 'property',
-          detail: `HTML attribute (${attr})`,
+          detail: item.detail,
           boost
         };
       })
@@ -812,7 +676,6 @@ export function htmlCompletions(context: CompletionContext): CompletionResult | 
   }
 
   // 4. In document body / text area:
-  // Match word including colon ':' for shortcuts like link:css, script:src, a:blank, btn:primary
   const word = context.matchBefore(/<?[a-zA-Z0-9_\-:]*/);
   if (!word || (word.from === word.to && !context.explicit)) return null;
 
@@ -827,15 +690,13 @@ export function htmlCompletions(context: CompletionContext): CompletionResult | 
         apply: snippet('<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>${1:Document}</title>\n</head>\n<body>\n  ${0}\n</body>\n</html>'),
         type: 'keyword',
         detail: 'Emmet HTML5 template',
-        boost: 20
+        boost: 25
       }]
     };
   }
 
-  // Check if starts with '<'
   const startsWithBracket = text.startsWith('<');
 
-  // Match special link, script, anchor, and button shortcuts (e.g. link:css, link:suicss, a:blank, btn:primary)
   const specialOptions = LINK_AND_SCRIPT_SNIPPETS.map(snip => ({
     label: startsWithBracket ? `<${snip.prefix}>` : snip.prefix,
     apply: snip.apply,
@@ -844,153 +705,23 @@ export function htmlCompletions(context: CompletionContext): CompletionResult | 
     boost: snip.boost
   }));
 
-  // Standard HTML tags with inbuilt attributes
-  const standardTagOptions = HTML_TAGS.map(tag => ({
-    label: startsWithBracket ? `<${tag}>` : tag,
-    apply: getTagSnippet(tag),
+  const allTagOptions = HTML_TAG_SNIPPETS.map(item => ({
+    label: startsWithBracket ? `<${item.tag}>` : item.tag,
+    apply: snippet(item.snippetStr),
     type: 'type',
-    detail: TAG_SNIPPET_TEMPLATES[tag]?.detail || `HTML <${tag}> tag`,
-    boost: tag === 'a' || tag === 'button' || tag === 'div' || tag === 'link' || tag === 'script' ? 6 : 2
+    detail: item.detail,
+    boost: item.boost
   }));
 
   return {
     from: word.from,
-    options: [...specialOptions, ...standardTagOptions]
+    options: [...specialOptions, ...allTagOptions]
   };
 }
 
 /* ---------------------------------------------------------
-   Comprehensive CSS Properties, Values & Selectors Autocomplete List
+   CSS Autocomplete Provider
    --------------------------------------------------------- */
-const CSS_PROPERTIES: { prop: string; detail?: string; snippetVal?: string; type?: string }[] = [
-  // Layout & Box Model
-  { prop: 'display', detail: 'flex | grid | block | inline-block | none | contents', snippetVal: 'display: ${1:flex};' },
-  { prop: 'position', detail: 'relative | absolute | fixed | sticky | static', snippetVal: 'position: ${1:relative};' },
-  { prop: 'top', snippetVal: 'top: ${1:0};' },
-  { prop: 'right', snippetVal: 'right: ${1:0};' },
-  { prop: 'bottom', snippetVal: 'bottom: ${1:0};' },
-  { prop: 'left', snippetVal: 'left: ${1:0};' },
-  { prop: 'inset', detail: 'top right bottom left', snippetVal: 'inset: ${1:0};' },
-  { prop: 'z-index', detail: 'stack order integer', snippetVal: 'z-index: ${1:10};' },
-  { prop: 'width', snippetVal: 'width: ${1:100%};' },
-  { prop: 'min-width', snippetVal: 'min-width: ${1:0};' },
-  { prop: 'max-width', snippetVal: 'max-width: ${1:1200px};' },
-  { prop: 'height', snippetVal: 'height: ${1:100%};' },
-  { prop: 'min-height', snippetVal: 'min-height: ${1:100vh};' },
-  { prop: 'max-height', snippetVal: 'max-height: ${1};' },
-  { prop: 'aspect-ratio', detail: '16/9 | 1/1 | 4/3', snippetVal: 'aspect-ratio: ${1:16 / 9};' },
-  { prop: 'box-sizing', detail: 'border-box | content-box', snippetVal: 'box-sizing: ${1:border-box};' },
-  { prop: 'margin', snippetVal: 'margin: ${1:0};' },
-  { prop: 'margin-top', snippetVal: 'margin-top: ${1:1rem};' },
-  { prop: 'margin-right', snippetVal: 'margin-right: ${1:1rem};' },
-  { prop: 'margin-bottom', snippetVal: 'margin-bottom: ${1:1rem};' },
-  { prop: 'margin-left', snippetVal: 'margin-left: ${1:1rem};' },
-  { prop: 'padding', snippetVal: 'padding: ${1:1rem};' },
-  { prop: 'padding-top', snippetVal: 'padding-top: ${1:1rem};' },
-  { prop: 'padding-right', snippetVal: 'padding-right: ${1:1rem};' },
-  { prop: 'padding-bottom', snippetVal: 'padding-bottom: ${1:1rem};' },
-  { prop: 'padding-left', snippetVal: 'padding-left: ${1:1rem};' },
-
-  // Flexbox & Grid
-  { prop: 'flex', snippetVal: 'flex: ${1:1};' },
-  { prop: 'flex-direction', detail: 'row | column | row-reverse | column-reverse', snippetVal: 'flex-direction: ${1:column};' },
-  { prop: 'flex-wrap', detail: 'nowrap | wrap | wrap-reverse', snippetVal: 'flex-wrap: ${1:wrap};' },
-  { prop: 'flex-grow', snippetVal: 'flex-grow: ${1:1};' },
-  { prop: 'flex-shrink', snippetVal: 'flex-shrink: ${1:0};' },
-  { prop: 'flex-basis', snippetVal: 'flex-basis: ${1:auto};' },
-  { prop: 'justify-content', detail: 'center | flex-start | flex-end | space-between | space-around | space-evenly', snippetVal: 'justify-content: ${1:center};' },
-  { prop: 'align-items', detail: 'center | flex-start | flex-end | stretch | baseline', snippetVal: 'align-items: ${1:center};' },
-  { prop: 'align-self', detail: 'auto | center | flex-start | flex-end | stretch', snippetVal: 'align-self: ${1:center};' },
-  { prop: 'align-content', snippetVal: 'align-content: ${1:center};' },
-  { prop: 'gap', snippetVal: 'gap: ${1:1rem};' },
-  { prop: 'row-gap', snippetVal: 'row-gap: ${1:1rem};' },
-  { prop: 'column-gap', snippetVal: 'column-gap: ${1:1rem};' },
-  { prop: 'grid', snippetVal: 'grid: ${1};' },
-  { prop: 'grid-template-columns', snippetVal: 'grid-template-columns: repeat(${1:3}, 1fr);' },
-  { prop: 'grid-template-rows', snippetVal: 'grid-template-rows: ${1:auto};' },
-  { prop: 'grid-column', snippetVal: 'grid-column: span ${1:2};' },
-  { prop: 'grid-row', snippetVal: 'grid-row: span ${1:2};' },
-  { prop: 'place-items', detail: 'align-items and justify-items shorthand', snippetVal: 'place-items: ${1:center};' },
-  { prop: 'place-content', snippetVal: 'place-content: ${1:center};' },
-
-  // Typography & Text
-  { prop: 'color', snippetVal: 'color: ${1:#ffffff};' },
-  { prop: 'font-family', snippetVal: "font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;" },
-  { prop: 'font-size', snippetVal: 'font-size: ${1:1rem};' },
-  { prop: 'font-weight', detail: '100 - 900 | bold | normal', snippetVal: 'font-weight: ${1:600};' },
-  { prop: 'line-height', snippetVal: 'line-height: ${1:1.5};' },
-  { prop: 'letter-spacing', snippetVal: 'letter-spacing: ${1:0.05em};' },
-  { prop: 'text-align', detail: 'left | center | right | justify', snippetVal: 'text-align: ${1:center};' },
-  { prop: 'text-decoration', detail: 'none | underline | line-through', snippetVal: 'text-decoration: ${1:none};' },
-  { prop: 'text-transform', detail: 'uppercase | lowercase | capitalize | none', snippetVal: 'text-transform: ${1:uppercase};' },
-  { prop: 'text-overflow', detail: 'ellipsis | clip', snippetVal: 'text-overflow: ${1:ellipsis};' },
-  { prop: 'text-shadow', snippetVal: 'text-shadow: 0 2px 4px rgba(0, 0, 0, ${1:0.2});' },
-  { prop: 'white-space', detail: 'normal | nowrap | pre | pre-wrap', snippetVal: 'white-space: ${1:nowrap};' },
-  { prop: 'word-break', detail: 'normal | break-all | keep-all | break-word', snippetVal: 'word-break: ${1:break-word};' },
-
-  // Background & Borders
-  { prop: 'background', snippetVal: 'background: ${1:#0f172a};' },
-  { prop: 'background-color', snippetVal: 'background-color: ${1:#1e293b};' },
-  { prop: 'background-image', snippetVal: 'background-image: ${1:linear-gradient(135deg, #6366f1, #a855f7)};' },
-  { prop: 'background-size', detail: 'cover | contain | auto', snippetVal: 'background-size: ${1:cover};' },
-  { prop: 'background-position', detail: 'center | top | bottom | left | right', snippetVal: 'background-position: ${1:center};' },
-  { prop: 'background-repeat', detail: 'no-repeat | repeat | repeat-x | repeat-y', snippetVal: 'background-repeat: no-repeat;' },
-  { prop: 'background-clip', detail: 'border-box | padding-box | content-box | text', snippetVal: 'background-clip: ${1:text};' },
-  { prop: 'border', snippetVal: 'border: 1px solid ${1:#e2e8f0};' },
-  { prop: 'border-radius', snippetVal: 'border-radius: ${1:8px};' },
-  { prop: 'border-color', snippetVal: 'border-color: ${1:#3b82f6};' },
-  { prop: 'border-width', snippetVal: 'border-width: ${1:1px};' },
-  { prop: 'border-style', detail: 'solid | dashed | dotted | none', snippetVal: 'border-style: ${1:solid};' },
-  { prop: 'outline', snippetVal: 'outline: 2px solid ${1:#3b82f6};' },
-  { prop: 'outline-offset', snippetVal: 'outline-offset: ${1:2px};' },
-  { prop: 'box-shadow', snippetVal: 'box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);' },
-
-  // Visual Effects, Transforms & Filters
-  { prop: 'opacity', snippetVal: 'opacity: ${1:1};' },
-  { prop: 'transform', snippetVal: 'transform: ${1:translateY(-2px)};' },
-  { prop: 'transform-origin', snippetVal: 'transform-origin: ${1:center};' },
-  { prop: 'transition', snippetVal: 'transition: all ${1:0.2s} ease;' },
-  { prop: 'transition-property', snippetVal: 'transition-property: ${1:all};' },
-  { prop: 'transition-duration', snippetVal: 'transition-duration: ${1:0.3s};' },
-  { prop: 'transition-timing-function', detail: 'ease | linear | ease-in | ease-out | ease-in-out | cubic-bezier', snippetVal: 'transition-timing-function: ${1:ease-in-out};' },
-  { prop: 'filter', detail: 'blur() | brightness() | contrast() | drop-shadow() | grayscale()', snippetVal: 'filter: ${1:blur(4px)};' },
-  { prop: 'backdrop-filter', detail: 'blur() | saturate() | brightness()', snippetVal: 'backdrop-filter: blur(${1:12px});' },
-  { prop: 'clip-path', snippetVal: 'clip-path: ${1:polygon(0 0, 100% 0, 100% 100%, 0 100%)};' },
-  { prop: 'overflow', detail: 'hidden | visible | auto | scroll', snippetVal: 'overflow: ${1:hidden};' },
-  { prop: 'overflow-x', snippetVal: 'overflow-x: ${1:auto};' },
-  { prop: 'overflow-y', snippetVal: 'overflow-y: ${1:auto};' },
-
-  // Animations & Keyframes
-  { prop: 'animation', snippetVal: 'animation: ${1:spin} ${2:1s} ${3:linear} ${4:infinite};' },
-  { prop: 'animation-name', snippetVal: 'animation-name: ${1:fadeIn};' },
-  { prop: 'animation-duration', snippetVal: 'animation-duration: ${1:0.5s};' },
-  { prop: 'animation-timing-function', snippetVal: 'animation-timing-function: ${1:ease-in-out};' },
-  { prop: 'animation-iteration-count', detail: 'infinite | 1 | 2...', snippetVal: 'animation-iteration-count: ${1:infinite};' },
-  { prop: 'animation-fill-mode', detail: 'forwards | backwards | both', snippetVal: 'animation-fill-mode: ${1:forwards};' },
-  { prop: 'animation-delay', snippetVal: 'animation-delay: ${1:0.2s};' },
-
-  // User Interaction & System
-  { prop: 'cursor', detail: 'pointer | default | not-allowed | grab | text', snippetVal: 'cursor: pointer;' },
-  { prop: 'pointer-events', detail: 'auto | none', snippetVal: 'pointer-events: ${1:auto};' },
-  { prop: 'user-select', detail: 'none | auto | text | all', snippetVal: 'user-select: none;' },
-  { prop: 'scroll-behavior', detail: 'smooth | auto', snippetVal: 'scroll-behavior: smooth;' },
-  { prop: 'accent-color', snippetVal: 'accent-color: ${1:#3b82f6};' },
-  { prop: 'content', detail: 'Generated content for ::before / ::after', snippetVal: 'content: "${1}";' },
-  { prop: 'visibility', detail: 'visible | hidden | collapse', snippetVal: 'visibility: ${1:hidden};' },
-  { prop: 'will-change', detail: 'transform | opacity | scroll-position', snippetVal: 'will-change: ${1:transform};' },
-
-  // Selectors & Pseudo-Classes (Direct snippets)
-  { prop: ':hover', detail: 'State when mouse is over element', snippetVal: ':hover {\n  ${0}\n}' },
-  { prop: ':focus', detail: 'State when element receives focus', snippetVal: ':focus {\n  outline: 2px solid ${1:#3b82f6};\n  outline-offset: 2px;\n}' },
-  { prop: ':focus-visible', detail: 'Accessible keyboard focus state', snippetVal: ':focus-visible {\n  outline: 2px solid ${1:#3b82f6};\n  outline-offset: 2px;\n}' },
-  { prop: ':active', detail: 'State when element is being clicked', snippetVal: ':active {\n  transform: scale(${1:0.98});\n}' },
-  { prop: '::before', detail: 'Pseudo-element inserted before content', snippetVal: '::before {\n  content: "";\n  ${0}\n}' },
-  { prop: '::after', detail: 'Pseudo-element inserted after content', snippetVal: '::after {\n  content: "";\n  ${0}\n}' },
-  { prop: ':root', detail: 'CSS custom properties root selector', snippetVal: ':root {\n  --primary: ${1:#6366f1};\n  --bg: ${2:#0f172a};\n  --text: ${3:#f8fafc};\n}' },
-  { prop: '@keyframes', detail: 'Define CSS animation keyframes', snippetVal: '@keyframes ${1:pulse} {\n  0% { transform: scale(1); opacity: 1; }\n  50% { transform: scale(1.05); opacity: 0.8; }\n  100% { transform: scale(1); opacity: 1; }\n}' },
-  { prop: '@media', detail: 'Responsive media query breakpoint', snippetVal: '@media (max-width: ${1:768px}) {\n  ${0}\n}' }
-];
-
 export function cssCompletions(context: CompletionContext): CompletionResult | null {
   const line = context.state.doc.lineAt(context.pos);
   const textBefore = line.text.slice(0, context.pos - line.from);
@@ -1004,17 +735,129 @@ export function cssCompletions(context: CompletionContext): CompletionResult | n
     if (node.name === 'StringLiteral' || node.name === 'Comment' || node.name === 'BlockComment') return null;
   } catch (e) {}
 
+  // 1. Context-aware value completion: Check if cursor is after a colon (e.g. "display: ", "position: rel")
+  const colonMatch = textBefore.match(/([a-zA-Z0-9_\-]+)\s*:\s*([^;{}]*)$/);
+  if (colonMatch) {
+    const propName = colonMatch[1].toLowerCase();
+    const valPrefix = colonMatch[2];
+    const word = context.matchBefore(/[a-zA-Z0-9_\-#%()]*/);
+    const fromPos = word ? word.from : context.pos;
+
+    // Check if property has pre-defined value suggestions
+    const validValues = CSS_PROPERTY_VALUE_MAP[propName];
+    const valueOptions: { label: string; apply: string; type: string; detail: string; boost: number }[] = [];
+
+    if (validValues && validValues.length > 0) {
+      for (const val of validValues) {
+        valueOptions.push({
+          label: val,
+          apply: `${val};`,
+          type: 'value',
+          detail: `Value for ${propName}`,
+          boost: 10
+        });
+      }
+    }
+
+    // If property accepts colors, suggest colors
+    if (propName.includes('color') || propName === 'background' || propName.includes('fill') || propName.includes('stroke')) {
+      for (const col of CODE_REFERENCE.cssValues.colors) {
+        valueOptions.push({
+          label: col,
+          apply: `${col};`,
+          type: 'color',
+          detail: `CSS color`,
+          boost: 8
+        });
+      }
+    }
+
+    // Units suggestions
+    if (['width', 'height', 'top', 'bottom', 'left', 'right', 'margin', 'padding', 'gap', 'font-size', 'border-width', 'border-radius', 'inset'].some(p => propName.includes(p))) {
+      for (const unit of ['px', 'rem', 'em', '%', 'vh', 'vw']) {
+        valueOptions.push({
+          label: `0${unit}`,
+          apply: `0${unit};`,
+          type: 'unit',
+          detail: `CSS unit (${unit})`,
+          boost: 5
+        });
+      }
+    }
+
+    if (valueOptions.length > 0) {
+      return {
+        from: fromPos,
+        options: valueOptions
+      };
+    }
+  }
+
+  // 2. Check if typing at-rules (starts with '@')
+  if (/@/.test(textBefore.slice(Math.max(0, textBefore.length - 20)))) {
+    const atWord = context.matchBefore(/@[a-zA-Z0-9_\-]*/);
+    if (atWord) {
+      return {
+        from: atWord.from,
+        options: COMPILED_CSS_AT_RULES.map(item => ({
+          label: item.rule,
+          apply: snippet(item.snippetStr),
+          type: 'keyword',
+          detail: item.detail,
+          boost: 12
+        }))
+      };
+    }
+  }
+
+  // 3. Check if typing pseudo-selectors (starts with ':' or '::')
+  if (/:/.test(textBefore.slice(Math.max(0, textBefore.length - 25)))) {
+    const selWord = context.matchBefore(/:[:a-zA-Z0-9_\-]*/);
+    if (selWord && selWord.text.startsWith(':')) {
+      return {
+        from: selWord.from,
+        options: COMPILED_CSS_SELECTORS.map(item => ({
+          label: item.selector,
+          apply: snippet(item.snippetStr),
+          type: 'keyword',
+          detail: item.detail,
+          boost: 10
+        }))
+      };
+    }
+  }
+
+  // 4. Standard CSS Properties matching
   const word = context.matchBefore(/[:@a-zA-Z0-9_\-]*/);
   if (!word || (word.from === word.to && !context.explicit)) return null;
 
+  const propertyOptions = COMPILED_CSS_PROPERTIES.map(item => ({
+    label: item.prop,
+    apply: snippet(item.snippetStr),
+    type: 'property',
+    detail: item.detail,
+    boost: item.boost
+  }));
+
+  const atRuleOptions = COMPILED_CSS_AT_RULES.map(item => ({
+    label: item.rule,
+    apply: snippet(item.snippetStr),
+    type: 'keyword',
+    detail: item.detail,
+    boost: 5
+  }));
+
+  const selectorOptions = COMPILED_CSS_SELECTORS.map(item => ({
+    label: item.selector,
+    apply: snippet(item.snippetStr),
+    type: 'keyword',
+    detail: item.detail,
+    boost: 4
+  }));
+
   return {
     from: word.from,
-    options: CSS_PROPERTIES.map(item => ({
-      label: item.prop,
-      apply: snippet(item.snippetVal || `${item.prop}: \${0};`),
-      type: item.prop.startsWith(':') || item.prop.startsWith('@') ? 'keyword' : 'property',
-      detail: item.detail || 'CSS property'
-    }))
+    options: [...propertyOptions, ...atRuleOptions, ...selectorOptions]
   };
 }
 
